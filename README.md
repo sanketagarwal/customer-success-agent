@@ -123,3 +123,11 @@ The project was scaffolded with `create-mastra` 1.25.0 and pins
 `@mastra/core` 1.59.0, `@mastra/libsql` 1.20.0, `@mastra/memory` 1.26.2, and
 `@mastra/observability` 1.17.0. API usage was checked against the documentation
 bundled with those packages and the official Mastra and HubSpot documentation.
+
+## Pullfrog review gate
+
+The repository includes Pullfrog's official dispatch workflow. The repository
+owner must install the Pullfrog GitHub App, select this repository in the
+Pullfrog console, configure model access, and enable the PR-review automation.
+Project code must not be merged to `main` until both `CI / validate` and the
+configured Pullfrog review pass.
