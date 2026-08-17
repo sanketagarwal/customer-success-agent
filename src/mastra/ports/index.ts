@@ -82,6 +82,20 @@ export interface IdempotencyStore {
   save(record: IdempotencyRecord): Promise<void>;
 }
 
+export interface CrmWriteIntent {
+  key: string;
+  status: 'pending' | 'completed';
+  writeId: string | null;
+  updatedAt: string;
+}
+
+export interface CrmWriteIntentStore {
+  claim(key: string, attemptedAt: string): Promise<boolean>;
+  getIntent(key: string): Promise<CrmWriteIntent | null>;
+  completeIntent(key: string, writeId: string, completedAt: string): Promise<void>;
+  releaseIntent(key: string): Promise<void>;
+}
+
 export interface Clock {
   now(): Date;
 }

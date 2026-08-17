@@ -20,7 +20,8 @@ behind the same CRM ports and is enabled only when explicitly configured.
 - Account memory is scoped to `(tenantId, accountId)`.
 - Approvals bind to a canonical artifact hash, expire, and are rechecked against
   source records through CRM-write time.
-- CRM writes are draft/internal-only and idempotent.
+- CRM writes are draft/internal-only and use durable write intents plus CRM
+  markers for idempotency across retries and process restarts.
 - Scheduled accounts run independently; one failure does not stop the batch.
 - CRM notes, support subjects, drafts, feedback, credentials, and emails are
   redacted from traces; raw free text is removed before model prompts are built.
@@ -100,7 +101,11 @@ creates idempotent follow-up tasks from the approved plan due dates. Hidden
 idempotency markers make partial retries safe. It never calls an email-sending
 API. Non-idempotent create requests are attempted once; if a response is
 ambiguous, the adapter re-reads the company associations and reconciles the
-marker instead of blindly replaying the POST.
+marker instead of blindly replaying the POST. A LibSQL write intent is claimed
+atomically before each create, so a reconciliation error or process restart
+cannot lose the ambiguity guard. If HubSpot never exposes a marker after an
+ambiguous response, the intent deliberately remains pending for manual review
+rather than risking a duplicate customer record.
 
 Set `HUBSPOT_RENEWAL_PROPERTY` to the internal name of your HubSpot company
 renewal-date property. Create that property in HubSpot first if the portal does
@@ -117,7 +122,7 @@ implement new adapters against their existing ports.
 - `adapters/fixture/`: deterministic fixtures and mock CRM writer
 - `adapters/model/`: Mastra structured-output intelligence
 - `adapters/hubspot/`: HubSpot CRM reader/writer
-- `memory/`: durable operational account, approval, and idempotency state
+- `memory/`: durable operational account, approval, idempotency, and CRM write-intent state
 - `services/`: grounding, drift, and account orchestration
 - `workflows/`: account approval workflow and scheduled isolated fan-out
 - `scorers/`: groundedness, extraction, plan, personalization, and relevance

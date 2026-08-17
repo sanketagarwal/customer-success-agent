@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { HubSpotAdapter } from '../src/mastra/adapters/hubspot/hubspot-adapter.js';
 import { FixedClock } from '../src/mastra/clock.js';
+import { InMemoryOperationalStore } from '../src/mastra/memory/operational-stores.js';
 import { createTestSystem, fixtureAsOf } from './helpers.js';
 
 function jsonResponse(value: unknown, status = 200): Response {
@@ -31,11 +32,13 @@ describe('HubSpot adapter', () => {
           ],
         }),
       );
+    const intents = new InMemoryOperationalStore();
     const adapter = new HubSpotAdapter({
       tenantId: 'tenant',
       token: 'test-token',
       baseUrl: 'https://api.hubapi.com',
       clock: new FixedClock(new Date('2026-08-17T09:00:00.000Z')),
+      intents,
       fetch: fetcher,
     });
     await expect(adapter.listAccounts('tenant')).resolves.toEqual([
@@ -94,11 +97,13 @@ describe('HubSpot adapter', () => {
       }
       throw new Error(`Unexpected HubSpot request: ${url}`);
     });
+    const intents = new InMemoryOperationalStore();
     const adapter = new HubSpotAdapter({
       tenantId: 'demo-tenant',
       token: 'test-token',
       baseUrl: 'https://api.hubapi.com',
       clock: new FixedClock(new Date(fixtureAsOf)),
+      intents,
       fetch: fetcher,
     });
     const result = await adapter.writeApprovedDraft({
@@ -130,6 +135,7 @@ describe('HubSpot adapter', () => {
       token: 'test-token',
       baseUrl: 'https://api.hubapi.com',
       clock: new FixedClock(new Date(fixtureAsOf)),
+      intents: new InMemoryOperationalStore(),
       fetch: fetcher,
     });
 
@@ -210,11 +216,13 @@ describe('HubSpot adapter', () => {
       }
       throw new Error(`Unexpected HubSpot request: ${url}`);
     });
+    const intents = new InMemoryOperationalStore();
     const adapter = new HubSpotAdapter({
       tenantId: 'demo-tenant',
       token: 'test-token',
       baseUrl: 'https://api.hubapi.com',
       clock: new FixedClock(new Date(fixtureAsOf)),
+      intents,
       fetch: fetcher,
     });
     const input = {
@@ -243,6 +251,7 @@ describe('HubSpot adapter', () => {
   });
 
   it('fails closed instead of replaying an ambiguous create before its marker is visible', async () => {
+    const intents = new InMemoryOperationalStore();
     const prepared = await createTestSystem().service.prepare({
       runId: 'hubspot-invisible-commit',
       tenantId: 'demo-tenant',
@@ -250,6 +259,7 @@ describe('HubSpot adapter', () => {
       asOf: fixtureAsOf,
     });
     let taskCreates = 0;
+    let failReconciliationRead = true;
     const fetcher = vi.fn<typeof fetch>(async (input, init) => {
       const url = String(input);
       if (url.includes('/associations/2026-03/tasks/companies/labels')) {
@@ -258,6 +268,9 @@ describe('HubSpot adapter', () => {
         });
       }
       if (url.includes('/objects/companies/') && url.includes('associations=tasks')) {
+        if (taskCreates > 0 && failReconciliationRead) {
+          return jsonResponse({ message: 'temporary reconciliation denial' }, 401);
+        }
         return jsonResponse({
           id: 'company-declining',
           createdAt: fixtureAsOf,
@@ -277,6 +290,7 @@ describe('HubSpot adapter', () => {
       token: 'test-token',
       baseUrl: 'https://api.hubapi.com',
       clock: new FixedClock(new Date(fixtureAsOf)),
+      intents,
       fetch: fetcher,
     });
     const input = {
@@ -289,8 +303,19 @@ describe('HubSpot adapter', () => {
       outreach: prepared.outreach!,
     };
 
-    await expect(adapter.writeApprovedDraft(input)).rejects.toThrow('retry budget');
-    await expect(adapter.writeApprovedDraft(input)).rejects.toThrow('still ambiguous');
+    await expect(adapter.writeApprovedDraft(input)).rejects.toThrow('HubSpot 401');
+    failReconciliationRead = false;
+    const restartedAdapter = new HubSpotAdapter({
+      tenantId: 'demo-tenant',
+      token: 'test-token',
+      baseUrl: 'https://api.hubapi.com',
+      clock: new FixedClock(new Date(fixtureAsOf)),
+      intents,
+      fetch: fetcher,
+    });
+    await expect(restartedAdapter.writeApprovedDraft(input)).rejects.toThrow(
+      'durable task write intent is pending',
+    );
     expect(taskCreates).toBe(1);
   });
 });

@@ -65,6 +65,7 @@ export function createComposition(config: AppConfig): Composition {
       baseUrl: config.hubspotBaseUrl,
       renewalProperty: config.hubspotRenewalProperty,
       clock,
+      intents: operationalStore,
     });
     crm = hubspot;
     crmWriter = hubspot;

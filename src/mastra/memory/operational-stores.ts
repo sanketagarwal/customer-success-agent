@@ -3,6 +3,8 @@ import { createClient, type Client } from '@libsql/client';
 import type {
   AccountMemoryStore,
   ApprovalStore,
+  CrmWriteIntent,
+  CrmWriteIntentStore,
   IdempotencyRecord,
   IdempotencyStore,
 } from '../ports/index.js';
@@ -17,12 +19,13 @@ import {
 import { scopeKey } from '../invariants/index.js';
 
 export class InMemoryOperationalStore
-  implements AccountMemoryStore, ApprovalStore, IdempotencyStore
+  implements AccountMemoryStore, ApprovalStore, IdempotencyStore, CrmWriteIntentStore
 {
   private readonly memories = new Map<string, AccountMemory>();
   private readonly requests = new Map<string, ApprovalRequest>();
   private readonly decisions = new Map<string, ApprovalDecision>();
   private readonly writes = new Map<string, IdempotencyRecord>();
+  private readonly intents = new Map<string, CrmWriteIntent>();
 
   get(tenantId: string, accountId: string): Promise<AccountMemory | null>;
   get(key: string): Promise<IdempotencyRecord | null>;
@@ -59,10 +62,28 @@ export class InMemoryOperationalStore
   async save(record: IdempotencyRecord): Promise<void> {
     this.writes.set(record.key, structuredClone(record));
   }
+
+  async claim(key: string, attemptedAt: string): Promise<boolean> {
+    if (this.intents.has(key)) return false;
+    this.intents.set(key, { key, status: 'pending', writeId: null, updatedAt: attemptedAt });
+    return true;
+  }
+
+  async getIntent(key: string): Promise<CrmWriteIntent | null> {
+    return this.intents.get(key) ?? null;
+  }
+
+  async completeIntent(key: string, writeId: string, completedAt: string): Promise<void> {
+    this.intents.set(key, { key, status: 'completed', writeId, updatedAt: completedAt });
+  }
+
+  async releaseIntent(key: string): Promise<void> {
+    if (this.intents.get(key)?.status === 'pending') this.intents.delete(key);
+  }
 }
 
 export class LibSqlOperationalStore
-  implements AccountMemoryStore, ApprovalStore, IdempotencyStore
+  implements AccountMemoryStore, ApprovalStore, IdempotencyStore, CrmWriteIntentStore
 {
   private readonly client: Client;
   private readonly initialized: Promise<void>;
@@ -92,6 +113,12 @@ export class LibSqlOperationalStore
           key TEXT PRIMARY KEY,
           write_id TEXT NOT NULL,
           written_at TEXT NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS cs_crm_write_intents (
+          key TEXT PRIMARY KEY,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'completed')),
+          write_id TEXT,
+          updated_at TEXT NOT NULL
         )`,
       ],
       'write',
@@ -183,6 +210,51 @@ export class LibSqlOperationalStore
     await this.client.execute({
       sql: 'INSERT OR IGNORE INTO cs_idempotency (key, write_id, written_at) VALUES (?, ?, ?)',
       args: [record.key, record.writeId, record.writtenAt],
+    });
+  }
+
+  async claim(key: string, attemptedAt: string): Promise<boolean> {
+    await this.initialized;
+    const result = await this.client.execute({
+      sql: `INSERT OR IGNORE INTO cs_crm_write_intents (key, status, write_id, updated_at)
+            VALUES (?, 'pending', NULL, ?)`,
+      args: [key, attemptedAt],
+    });
+    return result.rowsAffected === 1;
+  }
+
+  async getIntent(key: string): Promise<CrmWriteIntent | null> {
+    await this.initialized;
+    const result = await this.client.execute({
+      sql: 'SELECT key, status, write_id, updated_at FROM cs_crm_write_intents WHERE key = ?',
+      args: [key],
+    });
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      key: String(row.key),
+      status: String(row.status) === 'completed' ? 'completed' : 'pending',
+      writeId: row.write_id === null ? null : String(row.write_id),
+      updatedAt: String(row.updated_at),
+    };
+  }
+
+  async completeIntent(key: string, writeId: string, completedAt: string): Promise<void> {
+    await this.initialized;
+    await this.client.execute({
+      sql: `INSERT INTO cs_crm_write_intents (key, status, write_id, updated_at)
+            VALUES (?, 'completed', ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+              status = 'completed', write_id = excluded.write_id, updated_at = excluded.updated_at`,
+      args: [key, writeId, completedAt],
+    });
+  }
+
+  async releaseIntent(key: string): Promise<void> {
+    await this.initialized;
+    await this.client.execute({
+      sql: "DELETE FROM cs_crm_write_intents WHERE key = ? AND status = 'pending'",
+      args: [key],
     });
   }
 

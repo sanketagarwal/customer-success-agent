@@ -5,6 +5,7 @@ import type {
   AccountQuery,
   Clock,
   CrmRepository,
+  CrmWriteIntentStore,
   CrmWriteInput,
   CrmWriteResult,
   CrmWriter,
@@ -32,6 +33,7 @@ export interface HubSpotAdapterOptions {
   token: string;
   baseUrl: string;
   clock: Clock;
+  intents: CrmWriteIntentStore;
   fetch?: typeof globalThis.fetch;
   renewalProperty?: string;
 }
@@ -41,7 +43,6 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
   private readonly renewalProperty: string;
   private taskCompanyAssociationType?: Promise<number>;
   private readonly writeLocks = new Map<string, Promise<CrmWriteResult>>();
-  private readonly uncertainCreates = new Set<string>();
 
   constructor(private readonly options: HubSpotAdapterOptions) {
     this.fetcher = options.fetch ?? globalThis.fetch;
@@ -178,50 +179,82 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
       const taskMarker = `${marker}[action:${action.id}]`;
       const existingTask = tasks.find((task) => task.properties.hs_task_body?.includes(taskMarker));
       if (existingTask) {
-        this.uncertainCreates.delete(taskMarker);
+        await this.options.intents.completeIntent(
+          taskMarker,
+          existingTask.id,
+          existingTask.properties.hs_timestamp ?? existingTask.createdAt,
+        );
         continue;
       }
-      if (this.uncertainCreates.has(taskMarker)) {
+      const claimed = await this.options.intents.claim(
+        taskMarker,
+        this.options.clock.now().toISOString(),
+      );
+      if (!claimed) {
+        const intent = await this.options.intents.getIntent(taskMarker);
+        if (intent?.status === 'completed') continue;
         throw new ProviderUnavailableError(
           'hubspot',
-          'A prior task create is still ambiguous; retry after HubSpot associations converge',
+          'A durable task write intent is pending; retry after HubSpot associations converge',
         );
       }
       try {
-        await this.request(
-          '/crm/v3/objects/tasks',
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              properties: {
-                hs_timestamp: action.dueAt,
-                hs_task_subject: action.title,
-                hs_task_body: `${taskMarker}\n${action.rationale}`,
-                hs_task_status: 'NOT_STARTED',
-                hs_task_priority: action.priority.toUpperCase(),
-                hs_task_type: 'TODO',
-              },
-              associations: [
-                {
-                  to: { id: input.accountId },
-                  types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId }],
+        const createdTask = objectSchema.parse(
+          await this.request(
+            '/crm/v3/objects/tasks',
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                properties: {
+                  hs_timestamp: action.dueAt,
+                  hs_task_subject: action.title,
+                  hs_task_body: `${taskMarker}\n${action.rationale}`,
+                  hs_task_status: 'NOT_STARTED',
+                  hs_task_priority: action.priority.toUpperCase(),
+                  hs_task_type: 'TODO',
                 },
-              ],
-            }),
-          },
-          { retry: false },
+                associations: [
+                  {
+                    to: { id: input.accountId },
+                    types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId }],
+                  },
+                ],
+              }),
+            },
+            { retry: false },
+          ),
+        );
+        await this.options.intents.completeIntent(
+          taskMarker,
+          createdTask.id,
+          createdTask.properties.hs_timestamp ?? createdTask.createdAt,
         );
       } catch (error) {
-        if (!(error instanceof ProviderUnavailableError)) throw error;
-        tasks = await this.readCompanyTasks(input.accountId);
+        if (!(error instanceof ProviderUnavailableError)) {
+          await this.options.intents.releaseIntent(taskMarker);
+          throw error;
+        }
+        if (isRateLimitRejection(error)) {
+          await this.options.intents.releaseIntent(taskMarker);
+          throw error;
+        }
+        try {
+          tasks = await this.readCompanyTasks(input.accountId);
+        } catch (reconciliationError) {
+          throw reconciliationError;
+        }
         const reconciled = tasks.some((task) =>
           task.properties.hs_task_body?.includes(taskMarker),
         );
-        if (!reconciled) {
-          this.uncertainCreates.add(taskMarker);
-          throw error;
-        }
-        this.uncertainCreates.delete(taskMarker);
+        if (!reconciled) throw error;
+        const reconciledTask = tasks.find((task) =>
+          task.properties.hs_task_body?.includes(taskMarker),
+        )!;
+        await this.options.intents.completeIntent(
+          taskMarker,
+          reconciledTask.id,
+          reconciledTask.properties.hs_timestamp ?? reconciledTask.createdAt,
+        );
       }
     }
 
@@ -229,18 +262,32 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
       note.properties.hs_note_body?.includes(marker),
     );
     if (existing) {
-      this.uncertainCreates.delete(marker);
+      const writtenAt = existing.properties.hs_timestamp ?? existing.createdAt;
+      await this.options.intents.completeIntent(marker, existing.id, writtenAt);
       return {
         writeId: existing.id,
         idempotencyKey: input.idempotencyKey,
         created: false,
-        writtenAt: existing.properties.hs_timestamp ?? existing.createdAt,
+        writtenAt,
       };
     }
-    if (this.uncertainCreates.has(marker)) {
+    const noteClaimed = await this.options.intents.claim(
+      marker,
+      this.options.clock.now().toISOString(),
+    );
+    if (!noteClaimed) {
+      const intent = await this.options.intents.getIntent(marker);
+      if (intent?.status === 'completed' && intent.writeId) {
+        return {
+          writeId: intent.writeId,
+          idempotencyKey: input.idempotencyKey,
+          created: false,
+          writtenAt: intent.updatedAt,
+        };
+      }
       throw new ProviderUnavailableError(
         'hubspot',
-        'A prior note create is still ambiguous; retry after HubSpot associations converge',
+        'A durable note write intent is pending; retry after HubSpot associations converge',
       );
     }
 
@@ -277,17 +324,26 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
         ),
       );
     } catch (error) {
-      if (!(error instanceof ProviderUnavailableError)) throw error;
-      const reconciled = (await this.readCompanyNotes(input.accountId)).find((note) =>
-        note.properties.hs_note_body?.includes(marker),
-      );
-      if (!reconciled) {
-        this.uncertainCreates.add(marker);
+      if (!(error instanceof ProviderUnavailableError)) {
+        await this.options.intents.releaseIntent(marker);
         throw error;
       }
-      this.uncertainCreates.delete(marker);
+      if (isRateLimitRejection(error)) {
+        await this.options.intents.releaseIntent(marker);
+        throw error;
+      }
+      let reconciled;
+      try {
+        reconciled = (await this.readCompanyNotes(input.accountId)).find((note) =>
+          note.properties.hs_note_body?.includes(marker),
+        );
+      } catch (reconciliationError) {
+        throw reconciliationError;
+      }
+      if (!reconciled) throw error;
       created = reconciled;
     }
+    await this.options.intents.completeIntent(marker, created.id, writtenAt);
     return { writeId: created.id, idempotencyKey: input.idempotencyKey, created: true, writtenAt };
   }
 
@@ -360,6 +416,10 @@ function normalizeDate(value: string | null | undefined): string | null {
   if (!value) return null;
   const timestamp = /^\d+$/.test(value) ? Number(value) : Date.parse(value);
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+function isRateLimitRejection(error: ProviderUnavailableError): boolean {
+  return error.cause instanceof Error && error.cause.message.startsWith('HubSpot 429:');
 }
 
 function escapeHtml(value: string): string {
