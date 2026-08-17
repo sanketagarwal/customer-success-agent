@@ -93,7 +93,9 @@ dependencies from the composition root and never inspect `process.env`.
 - CRM output is draft/internal-only. This template never sends outreach.
 - Before any HubSpot create request, an atomic durable write intent is claimed.
   Ambiguous responses remain pending across retries and process restarts until
-  the hidden CRM marker is observed; the POST is never blindly replayed.
+  the hidden CRM marker is observed. Parsing, persistence, or reconciliation
+  failures after a possible commit preserve the pending intent; the POST is
+  never blindly replayed.
 - One account failure cannot terminate the scheduled batch.
 
 ## 5. Data handling

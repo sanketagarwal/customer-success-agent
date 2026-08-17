@@ -103,9 +103,11 @@ API. Non-idempotent create requests are attempted once; if a response is
 ambiguous, the adapter re-reads the company associations and reconciles the
 marker instead of blindly replaying the POST. A LibSQL write intent is claimed
 atomically before each create, so a reconciliation error or process restart
-cannot lose the ambiguity guard. If HubSpot never exposes a marker after an
-ambiguous response, the intent deliberately remains pending for manual review
-rather than risking a duplicate customer record.
+cannot lose the ambiguity guard. Response parsing and local intent-completion
+failures also preserve the pending claim after HubSpot may have committed. If
+HubSpot never exposes a marker after an ambiguous response, the intent
+deliberately remains pending for manual review rather than risking a duplicate
+customer record.
 
 Set `HUBSPOT_RENEWAL_PROPERTY` to the internal name of your HubSpot company
 renewal-date property. Create that property in HubSpot first if the portal does

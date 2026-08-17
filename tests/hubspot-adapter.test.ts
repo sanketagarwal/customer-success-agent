@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { HubSpotAdapter } from '../src/mastra/adapters/hubspot/hubspot-adapter.js';
 import { FixedClock } from '../src/mastra/clock.js';
 import { InMemoryOperationalStore } from '../src/mastra/memory/operational-stores.js';
+import type { CrmWriteIntentStore } from '../src/mastra/ports/index.js';
 import { createTestSystem, fixtureAsOf } from './helpers.js';
 
 function jsonResponse(value: unknown, status = 200): Response {
@@ -314,6 +315,82 @@ describe('HubSpot adapter', () => {
       fetch: fetcher,
     });
     await expect(restartedAdapter.writeApprovedDraft(input)).rejects.toThrow(
+      'durable task write intent is pending',
+    );
+    expect(taskCreates).toBe(1);
+  });
+
+  it('preserves a durable pending intent when local completion fails after a successful create', async () => {
+    const durable = new InMemoryOperationalStore();
+    let failCompletion = true;
+    const intents: CrmWriteIntentStore = {
+      claim: (key, attemptedAt) => durable.claim(key, attemptedAt),
+      getIntent: (key) => durable.getIntent(key),
+      async completeIntent(key, writeId, completedAt) {
+        if (failCompletion) {
+          failCompletion = false;
+          throw new Error('simulated local intent completion failure');
+        }
+        await durable.completeIntent(key, writeId, completedAt);
+      },
+      releaseIntent: (key) => durable.releaseIntent(key),
+    };
+    const prepared = await createTestSystem().service.prepare({
+      runId: 'hubspot-local-completion-failure',
+      tenantId: 'demo-tenant',
+      accountId: 'company-declining',
+      asOf: fixtureAsOf,
+    });
+    let taskCreates = 0;
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/associations/2026-03/tasks/companies/labels')) {
+        return jsonResponse({
+          results: [{ typeId: 192, category: 'HUBSPOT_DEFINED', label: null }],
+        });
+      }
+      if (url.includes('/objects/companies/') && url.includes('associations=tasks')) {
+        return jsonResponse({
+          id: 'company-declining',
+          createdAt: fixtureAsOf,
+          updatedAt: fixtureAsOf,
+          properties: {},
+          associations: { tasks: { results: [] } },
+        });
+      }
+      if (init?.method === 'POST' && url.endsWith('/tasks')) {
+        taskCreates += 1;
+        return jsonResponse({
+          id: 'created-task',
+          createdAt: fixtureAsOf,
+          updatedAt: fixtureAsOf,
+          properties: {},
+        }, 201);
+      }
+      throw new Error(`Unexpected HubSpot request: ${url}`);
+    });
+    const options = {
+      tenantId: 'demo-tenant',
+      token: 'test-token',
+      baseUrl: 'https://api.hubapi.com',
+      clock: new FixedClock(new Date(fixtureAsOf)),
+      intents,
+      fetch: fetcher,
+    };
+    const input = {
+      tenantId: prepared.tenantId,
+      accountId: prepared.accountId,
+      runId: prepared.runId,
+      idempotencyKey: 'local-completion-failure',
+      assessment: prepared.assessment!,
+      plan: { ...prepared.plan!, actions: [prepared.plan!.actions[0]!] },
+      outreach: prepared.outreach!,
+    };
+
+    await expect(new HubSpotAdapter(options).writeApprovedDraft(input)).rejects.toThrow(
+      'simulated local intent completion failure',
+    );
+    await expect(new HubSpotAdapter(options).writeApprovedDraft(input)).rejects.toThrow(
       'durable task write intent is pending',
     );
     expect(taskCreates).toBe(1);

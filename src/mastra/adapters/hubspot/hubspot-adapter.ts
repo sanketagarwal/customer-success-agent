@@ -198,36 +198,30 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
           'A durable task write intent is pending; retry after HubSpot associations converge',
         );
       }
+      let rawCreatedTask: unknown;
       try {
-        const createdTask = objectSchema.parse(
-          await this.request(
-            '/crm/v3/objects/tasks',
-            {
-              method: 'POST',
-              body: JSON.stringify({
-                properties: {
-                  hs_timestamp: action.dueAt,
-                  hs_task_subject: action.title,
-                  hs_task_body: `${taskMarker}\n${action.rationale}`,
-                  hs_task_status: 'NOT_STARTED',
-                  hs_task_priority: action.priority.toUpperCase(),
-                  hs_task_type: 'TODO',
+        rawCreatedTask = await this.request(
+          '/crm/v3/objects/tasks',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              properties: {
+                hs_timestamp: action.dueAt,
+                hs_task_subject: action.title,
+                hs_task_body: `${taskMarker}\n${action.rationale}`,
+                hs_task_status: 'NOT_STARTED',
+                hs_task_priority: action.priority.toUpperCase(),
+                hs_task_type: 'TODO',
+              },
+              associations: [
+                {
+                  to: { id: input.accountId },
+                  types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId }],
                 },
-                associations: [
-                  {
-                    to: { id: input.accountId },
-                    types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId }],
-                  },
-                ],
-              }),
-            },
-            { retry: false },
-          ),
-        );
-        await this.options.intents.completeIntent(
-          taskMarker,
-          createdTask.id,
-          createdTask.properties.hs_timestamp ?? createdTask.createdAt,
+              ],
+            }),
+          },
+          { retry: false },
         );
       } catch (error) {
         if (!(error instanceof ProviderUnavailableError)) {
@@ -255,7 +249,14 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
           reconciledTask.id,
           reconciledTask.properties.hs_timestamp ?? reconciledTask.createdAt,
         );
+        continue;
       }
+      const createdTask = objectSchema.parse(rawCreatedTask);
+      await this.options.intents.completeIntent(
+        taskMarker,
+        createdTask.id,
+        createdTask.properties.hs_timestamp ?? createdTask.createdAt,
+      );
     }
 
     const existing = (await this.readCompanyNotes(input.accountId)).find((note) =>
@@ -303,25 +304,23 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
       `<p>${escapeHtml(input.outreach.subject)}</p>`,
       `<p>${escapeHtml(input.outreach.body)}</p>`,
     ].join('\n');
-    let created: z.infer<typeof objectSchema>;
+    let rawCreatedNote: unknown;
     try {
-      created = objectSchema.parse(
-        await this.request(
-          '/crm/v3/objects/notes',
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              properties: { hs_timestamp: writtenAt, hs_note_body: body },
-              associations: [
-                {
-                  to: { id: input.accountId },
-                  types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 190 }],
-                },
-              ],
-            }),
-          },
-          { retry: false },
-        ),
+      rawCreatedNote = await this.request(
+        '/crm/v3/objects/notes',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            properties: { hs_timestamp: writtenAt, hs_note_body: body },
+            associations: [
+              {
+                to: { id: input.accountId },
+                types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 190 }],
+              },
+            ],
+          }),
+        },
+        { retry: false },
       );
     } catch (error) {
       if (!(error instanceof ProviderUnavailableError)) {
@@ -341,8 +340,15 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
         throw reconciliationError;
       }
       if (!reconciled) throw error;
-      created = reconciled;
+      await this.options.intents.completeIntent(marker, reconciled.id, writtenAt);
+      return {
+        writeId: reconciled.id,
+        idempotencyKey: input.idempotencyKey,
+        created: true,
+        writtenAt,
+      };
     }
+    const created = objectSchema.parse(rawCreatedNote);
     await this.options.intents.completeIntent(marker, created.id, writtenAt);
     return { writeId: created.id, idempotencyKey: input.idempotencyKey, created: true, writtenAt };
   }
