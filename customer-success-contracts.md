@@ -22,10 +22,12 @@ the executable form of these contracts.
 ### Evidence
 
 `EvidenceRef` is a deterministic pointer containing `source`, `recordId`,
-`fieldPath`, and `window`. `Evidence` adds the displayed `metricOrQuote` and
-optional observed `value`. Evidence resolution succeeds only when the record,
-field path, and time window resolve in the exact normalized source snapshot
-used for the run.
+`fieldPath`, and `window`. `Evidence` adds the displayed `metricOrQuote` and a
+required observed `value`. Evidence resolution succeeds only when the record,
+field path, time window, and exact primitive value resolve in the normalized
+source snapshot used for the run. Customer-specific prose is rendered from
+these verified facts; arbitrary generated prose cannot pass the deterministic
+grounding gate.
 
 The canonical schemas are:
 
@@ -78,10 +80,18 @@ dependencies from the composition root and never inspect `process.env`.
 - `idempotencyKey(tenantId, accountId, artifactType, runOrAsOf)` identifies one
   logical CRM mutation. Replays return the original result.
 - `evidenceResolves(ref, sources)` is deterministic and provider-neutral.
+- Evidence must match the exact primitive source value and source window;
+  customer-specific prose is rendered only from verified evidence.
+- Request-scoped tenant/account/as-of values are authoritative. A model cannot
+  supply or override identity fields used for memory, approval, or CRM writes.
+- Approval freshness is checked through write time, so records arriving after
+  assessment force a new assessment and approval.
 - A source transport failure maps to `unknown_retry`, never to missing data.
 - A first run creates a baseline; drift begins on the second assessment.
 - Healthy accounts exit before plan and outreach generation.
 - CRM output is draft/internal-only. This template never sends outreach.
+- HubSpot create requests are not blindly retried after ambiguous responses;
+  the adapter reconciles its hidden marker before continuing.
 - One account failure cannot terminate the scheduled batch.
 
 ## 5. Data handling
@@ -89,4 +99,5 @@ dependencies from the composition root and never inspect `process.env`.
 CRM note bodies, outreach bodies, CSM feedback, tokens, email addresses, and
 other free-text customer data are sensitive. Observability must retain account
 and run correlation while redacting these values from trace inputs, outputs,
-and attributes. Tests must verify redaction.
+and attributes. Raw CRM note bodies and support subjects must be removed before
+serialized model prompts are created. Tests must verify both shapes.

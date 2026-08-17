@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
+import { DeterministicCustomerSuccessIntelligence } from '../src/mastra/adapters/fixture/deterministic-intelligence.js';
 import { scopeKey } from '../src/mastra/invariants/index.js';
+import type { Clock, CrmRepository, CustomerSuccessIntelligence } from '../src/mastra/ports/index.js';
 import type { ApprovalDecision } from '../src/mastra/schemas/index.js';
-import { checkAssessmentGrounding } from '../src/mastra/services/grounding.js';
+import {
+  checkAssessmentGrounding,
+  checkOutreachGrounding,
+  checkPlanGrounding,
+} from '../src/mastra/services/grounding.js';
 import { createTestSystem, fixtureAsOf } from './helpers.js';
 
 describe('customer success service', () => {
@@ -45,6 +51,92 @@ describe('customer success service', () => {
       grounded: false,
       unresolved: ['riskFactors[0].evidence[0]'],
     });
+
+    const fabricatedValue = structuredClone(prepared.assessment!);
+    fabricatedValue.riskFactors[0]!.evidence[0]!.value = 'fabricated-value';
+    expect(checkAssessmentGrounding(fabricatedValue, snapshot)).toMatchObject({
+      grounded: false,
+      unresolved: expect.arrayContaining([
+        'riskFactors[0].evidence[0]',
+        'riskFactors[0].explanation',
+      ]),
+    });
+
+    const fabricatedSummary = structuredClone(prepared.assessment!);
+    fabricatedSummary.summary = 'The customer explicitly promised to churn tomorrow.';
+    expect(checkAssessmentGrounding(fabricatedSummary, snapshot)).toMatchObject({
+      grounded: false,
+      unresolved: ['summary'],
+    });
+
+    const fabricatedPlan = structuredClone(prepared.plan!);
+    fabricatedPlan.actions[0]!.rationale = 'This unsupported action is definitely required.';
+    expect(checkPlanGrounding(fabricatedPlan, snapshot)).toMatchObject({
+      grounded: false,
+      unresolved: ['actions[0].rationale'],
+    });
+
+    const fabricatedOutreach = structuredClone(prepared.outreach!);
+    fabricatedOutreach.body = 'The customer promised to cancel tomorrow.';
+    expect(checkOutreachGrounding(fabricatedOutreach, snapshot)).toMatchObject({
+      grounded: false,
+      unresolved: ['body'],
+    });
+  });
+
+  it('makes request identity authoritative over model-generated identity', async () => {
+    const deterministic = new DeterministicCustomerSuccessIntelligence();
+    const malicious: CustomerSuccessIntelligence = {
+      async assess(input) {
+        return {
+          ...(await deterministic.assess(input)),
+          tenantId: 'victim-tenant',
+          accountId: 'victim-account',
+          asOf: '2025-01-01T00:00:00.000Z',
+        };
+      },
+      async plan(input) {
+        return {
+          ...(await deterministic.plan(input)),
+          tenantId: 'victim-tenant',
+          accountId: 'victim-account',
+          asOf: '2025-01-01T00:00:00.000Z',
+        };
+      },
+      async draftOutreach(input) {
+        return {
+          ...(await deterministic.draftOutreach(input)),
+          tenantId: 'victim-tenant',
+          accountId: 'victim-account',
+          asOf: '2025-01-01T00:00:00.000Z',
+        };
+      },
+    };
+    const { service, store } = createTestSystem({ intelligence: malicious });
+    const prepared = await service.prepare({
+      runId: 'model-identity-isolation',
+      tenantId: 'demo-tenant',
+      accountId: 'company-declining',
+      asOf: fixtureAsOf,
+    });
+
+    expect(prepared.assessment).toMatchObject({
+      tenantId: 'demo-tenant',
+      accountId: 'company-declining',
+      asOf: fixtureAsOf,
+    });
+    expect(prepared.plan).toMatchObject({
+      tenantId: 'demo-tenant',
+      accountId: 'company-declining',
+      asOf: fixtureAsOf,
+    });
+    expect(prepared.outreach).toMatchObject({
+      tenantId: 'demo-tenant',
+      accountId: 'company-declining',
+      asOf: fixtureAsOf,
+    });
+    expect(await store.get('victim-tenant', 'victim-account')).toBeNull();
+    expect(await store.get('demo-tenant', 'company-declining')).not.toBeNull();
   });
 
   it('creates a baseline, then calculates stable drift and persistent factors', async () => {
@@ -136,5 +228,53 @@ describe('customer success service', () => {
       boundToAsOf: stale.assessment!.asOf,
     });
     expect(staleResult).toMatchObject({ run: { outcome: 'stale_approval' }, write: null });
+  });
+
+  it('invalidates approval when a source record arrives after assessment', async () => {
+    let now = fixtureAsOf;
+    const clock: Clock = { now: () => new Date(now) };
+    const system = createTestSystem({ clock });
+    const baseCrm = system.fixtures;
+    const crm: CrmRepository = {
+      listAccounts: (tenantId) => baseCrm.listAccounts(tenantId),
+      async getCrmNotes(query) {
+        const result = await baseCrm.getCrmNotes(query);
+        if (query.window.end === fixtureAsOf || result.status !== 'available') return result;
+        return {
+          status: 'available',
+          data: {
+            ...result.data,
+            window: query.window,
+            notes: [
+              ...result.data.notes,
+              {
+                recordId: 'post-assessment-note',
+                createdAt: '2026-08-18T08:00:00.000Z',
+                authorId: 'csm-priya',
+                body: 'A new renewal concern was reported.',
+                sentiment: 'negative',
+              },
+            ],
+          },
+        };
+      },
+    };
+    system.dependencies.crm = crm;
+    const prepared = await system.service.prepare({
+      runId: 'approval-new-source',
+      tenantId: 'demo-tenant',
+      accountId: 'company-declining',
+      asOf: fixtureAsOf,
+    });
+    now = '2026-08-18T09:00:00.000Z';
+    const result = await system.service.finalize(prepared, {
+      decision: 'approved',
+      approverId: 'csm-priya',
+      decidedAt: now,
+      expiresAt: '2026-08-20T09:00:00.000Z',
+      boundToHash: prepared.artifactHash!,
+      boundToAsOf: prepared.assessment!.asOf,
+    });
+    expect(result).toMatchObject({ run: { outcome: 'stale_approval' }, write: null });
   });
 });

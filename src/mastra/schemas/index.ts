@@ -35,7 +35,7 @@ export const evidenceValueSchema = z.union([
 export const evidenceSchema = z.object({
   ref: evidenceRefSchema,
   metricOrQuote: z.string().min(1),
-  value: evidenceValueSchema.optional(),
+  value: evidenceValueSchema,
 });
 
 export const usagePointSchema = z.object({
@@ -192,7 +192,7 @@ export const outreachDraftSchema = z.object({
   channel: z.enum(['email', 'crm_task']),
   subject: z.string().min(1),
   body: z.string().min(1),
-  claims: z.array(outreachClaimSchema),
+  claims: z.array(outreachClaimSchema).min(1),
   draftOnly: z.literal(true),
 });
 

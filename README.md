@@ -10,15 +10,20 @@ behind the same CRM ports and is enabled only when explicitly configured.
 
 ## Safety properties
 
-- Structured evidence points to an exact source, record, field, and window.
-- Deterministic code blocks unsupported assessment, plan, and outreach claims.
+- Structured evidence points to an exact source, record, field, window, and
+  primitive value.
+- Customer-specific assessment, plan, and outreach prose is deterministically
+  rendered from verified facts; arbitrary generated prose cannot pass the gate.
+- Request tenant/account/as-of identity overrides model output.
 - Provider outages produce `unknown_retry`; successful empty reads can produce
   `insufficient_data`.
 - Account memory is scoped to `(tenantId, accountId)`.
-- Approvals bind to a canonical artifact hash and expire.
+- Approvals bind to a canonical artifact hash, expire, and are rechecked against
+  source records through CRM-write time.
 - CRM writes are draft/internal-only and idempotent.
 - Scheduled accounts run independently; one failure does not stop the batch.
-- CRM notes, drafts, feedback, credentials, and emails are redacted from traces.
+- CRM notes, support subjects, drafts, feedback, credentials, and emails are
+  redacted from traces; raw free text is removed before model prompts are built.
 
 ## Quick start
 
@@ -93,7 +98,9 @@ association labels and creating notes and tasks. The writer creates an internal
 note containing the health summary, account plan, and draft outreach, then
 creates idempotent follow-up tasks from the approved plan due dates. Hidden
 idempotency markers make partial retries safe. It never calls an email-sending
-API.
+API. Non-idempotent create requests are attempted once; if a response is
+ambiguous, the adapter re-reads the company associations and reconciles the
+marker instead of blindly replaying the POST.
 
 Set `HUBSPOT_RENEWAL_PROPERTY` to the internal name of your HubSpot company
 renewal-date property. Create that property in HubSpot first if the portal does
@@ -119,8 +126,9 @@ implement new adapters against their existing ports.
 
 The implementation follows: data layer → assessment and groundedness → memory
 and drift → plan and outreach → approval and CRM write → scheduling and
-observability → HubSpot adapter. The groundedness test deliberately fabricates
-an evidence reference and is the go/no-go safety check.
+observability → HubSpot adapter. The groundedness tests deliberately fabricate
+references, values, assessment prose, plan rationales, and outreach claims;
+each must be rejected before the pipeline can proceed.
 
 ## Verified API baseline
 

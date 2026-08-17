@@ -25,9 +25,12 @@ import {
   type SourceSnapshot,
   type TimeWindow,
 } from '../schemas/index.js';
-import { artifactHash, idempotencyKey, scopeKey } from '../invariants/index.js';
+import { artifactHash, idempotencyKey, scopeKey, sourceSnapshotHash } from '../invariants/index.js';
 import { applyFactorStatuses, calculateDrift } from './drift.js';
 import {
+  canonicalizeAssessmentNarratives,
+  canonicalizeOutreachNarratives,
+  canonicalizePlanNarratives,
   checkAssessmentGrounding,
   checkOutreachGrounding,
   checkPlanGrounding,
@@ -125,10 +128,13 @@ export class CustomerSuccessService {
 
     const previous = await this.dependencies.memory.get(input.tenantId, input.accountId);
     const generated = await this.dependencies.intelligence.assess({ snapshot, previous, asOf });
-    let assessment = healthAssessmentSchema.parse({
+    let assessment = canonicalizeAssessmentNarratives(healthAssessmentSchema.parse({
       ...generated,
-      sourceSnapshotHash: artifactHash(snapshot),
-    });
+      tenantId: input.tenantId,
+      accountId: input.accountId,
+      asOf,
+      sourceSnapshotHash: sourceSnapshotHash(snapshot),
+    }));
     const initialGrounding = checkAssessmentGrounding(assessment, snapshot);
     if (!initialGrounding.grounded) {
       return preparedRunSchema.parse({
@@ -160,9 +166,13 @@ export class CustomerSuccessService {
       });
     }
 
-    const plan = accountPlanSchema.parse(
-      await this.dependencies.intelligence.plan({ assessment, snapshot, asOf }),
-    );
+    const generatedPlan = await this.dependencies.intelligence.plan({ assessment, snapshot, asOf });
+    const plan = canonicalizePlanNarratives(accountPlanSchema.parse({
+      ...generatedPlan,
+      tenantId: input.tenantId,
+      accountId: input.accountId,
+      asOf,
+    }));
     const planGrounding = checkPlanGrounding(plan, snapshot);
     if (!planGrounding.grounded) {
       return preparedRunSchema.parse({
@@ -177,9 +187,18 @@ export class CustomerSuccessService {
       });
     }
 
-    const outreach = outreachDraftSchema.parse(
-      await this.dependencies.intelligence.draftOutreach({ assessment, plan, snapshot, asOf }),
-    );
+    const generatedOutreach = await this.dependencies.intelligence.draftOutreach({
+      assessment,
+      plan,
+      snapshot,
+      asOf,
+    });
+    const outreach = canonicalizeOutreachNarratives(outreachDraftSchema.parse({
+      ...generatedOutreach,
+      tenantId: input.tenantId,
+      accountId: input.accountId,
+      asOf,
+    }));
     const outreachGrounding = checkOutreachGrounding(outreach, snapshot);
     if (!outreachGrounding.grounded) {
       return preparedRunSchema.parse({
@@ -247,9 +266,28 @@ export class CustomerSuccessService {
     const freshSnapshot = await this.collect(
       prepared.tenantId,
       prepared.accountId,
-      assessmentWindow(prepared.assessment.asOf),
+      {
+        start: assessmentWindow(prepared.assessment.asOf).start,
+        end: now,
+      },
     );
-    if (artifactHash(freshSnapshot) !== prepared.assessment.sourceSnapshotHash) {
+    const freshResults = [
+      freshSnapshot.usage,
+      freshSnapshot.support,
+      freshSnapshot.billing,
+      freshSnapshot.crm,
+    ];
+    if (freshResults.some((result) => result.status === 'unavailable')) {
+      return {
+        run: {
+          ...prepared,
+          outcome: 'unknown_retry',
+          message: 'A source was unavailable during approval freshness validation.',
+        },
+        write: null,
+      };
+    }
+    if (sourceSnapshotHash(freshSnapshot) !== prepared.assessment.sourceSnapshotHash) {
       return { run: { ...prepared, outcome: 'stale_approval', message: 'Source data changed after assessment; approval is required again.' }, write: null };
     }
 

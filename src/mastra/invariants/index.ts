@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import type { EvidenceRef, SourceSnapshot } from '../schemas/index.js';
+import type { Evidence, EvidenceRef, SourceSnapshot } from '../schemas/index.js';
 
 export function scopeKey(tenantId: string, accountId: string): string {
   if (!tenantId || !accountId) {
@@ -52,24 +52,28 @@ function withinWindow(timestamp: string, ref: EvidenceRef): boolean {
   return value >= Date.parse(ref.window.start) && value <= Date.parse(ref.window.end);
 }
 
-export function evidenceResolves(ref: EvidenceRef, sources: SourceSnapshot): boolean {
+function resolveEvidenceValue(
+  ref: EvidenceRef,
+  sources: SourceSnapshot,
+): { resolved: boolean; value?: unknown } {
   let records: readonly Record<string, unknown>[];
   if (ref.source === 'usage') {
-    if (sources.usage.status !== 'available') return false;
+    if (sources.usage.status !== 'available') return { resolved: false };
     records = sources.usage.data.points;
   } else if (ref.source === 'support') {
-    if (sources.support.status !== 'available') return false;
+    if (sources.support.status !== 'available') return { resolved: false };
     records = sources.support.data.tickets;
   } else if (ref.source === 'crm') {
-    if (sources.crm.status !== 'available') return false;
+    if (sources.crm.status !== 'available') return { resolved: false };
     records = sources.crm.data.notes;
   } else if (ref.source === 'billing') {
-    if (sources.billing.status !== 'available') return false;
+    if (sources.billing.status !== 'available') return { resolved: false };
     records = [sources.billing.data];
-  } else return false;
+  } else return { resolved: false };
 
   const record = records.find((candidate) => candidate.recordId === ref.recordId);
-  if (!record || getAtPath(record, ref.fieldPath) === undefined) return false;
+  const value = record ? getAtPath(record, ref.fieldPath) : undefined;
+  if (!record || value === undefined) return { resolved: false };
 
   const timestamp =
     typeof record.timestamp === 'string'
@@ -79,5 +83,43 @@ export function evidenceResolves(ref: EvidenceRef, sources: SourceSnapshot): boo
         : typeof record.asOf === 'string'
           ? record.asOf
           : undefined;
-  return timestamp ? withinWindow(timestamp, ref) : true;
+  return timestamp && !withinWindow(timestamp, ref)
+    ? { resolved: false }
+    : { resolved: true, value };
+}
+
+export function evidenceResolves(ref: EvidenceRef, sources: SourceSnapshot): boolean {
+  return resolveEvidenceValue(ref, sources).resolved;
+}
+
+export function evidenceMatchesSource(evidence: Evidence, sources: SourceSnapshot): boolean {
+  const resolved = resolveEvidenceValue(evidence.ref, sources);
+  return resolved.resolved &&
+    evidence.ref.window.start === sources.window.start &&
+    evidence.ref.window.end === sources.window.end &&
+    Object.is(resolved.value, evidence.value);
+}
+
+export function sourceSnapshotHash(snapshot: SourceSnapshot): string {
+  const withoutWindow = (
+    result:
+      | SourceSnapshot['usage']
+      | SourceSnapshot['support']
+      | SourceSnapshot['billing']
+      | SourceSnapshot['crm'],
+  ) => {
+    if (result.status !== 'available') return result;
+    const { window: _window, ...data } = result.data as typeof result.data & {
+      window?: unknown;
+    };
+    return { status: result.status, data };
+  };
+  return artifactHash({
+    tenantId: snapshot.tenantId,
+    accountId: snapshot.accountId,
+    usage: withoutWindow(snapshot.usage),
+    support: withoutWindow(snapshot.support),
+    billing: withoutWindow(snapshot.billing),
+    crm: withoutWindow(snapshot.crm),
+  });
 }

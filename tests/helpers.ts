@@ -6,15 +6,16 @@ import { MockCrmWriter } from '../src/mastra/adapters/fixture/mock-crm-writer.js
 import { FixedClock } from '../src/mastra/clock.js';
 import { InMemoryOperationalStore } from '../src/mastra/memory/operational-stores.js';
 import { CustomerSuccessService } from '../src/mastra/services/customer-success-service.js';
+import type { CustomerSuccessDependencies } from '../src/mastra/services/customer-success-service.js';
 
 export const fixtureAsOf = '2026-08-17T09:00:00.000Z';
 
-export function createTestSystem() {
+export function createTestSystem(overrides: Partial<CustomerSuccessDependencies> = {}) {
   const clock = new FixedClock(new Date(fixtureAsOf));
   const fixtures = new FixtureRepositories(resolve('data/fixtures/accounts.json'));
   const store = new InMemoryOperationalStore();
   const writer = new MockCrmWriter(store, clock);
-  const service = new CustomerSuccessService({
+  const dependencies: CustomerSuccessDependencies = {
     usage: fixtures,
     support: fixtures,
     billing: fixtures,
@@ -24,6 +25,8 @@ export function createTestSystem() {
     approvals: store,
     intelligence: new DeterministicCustomerSuccessIntelligence(),
     clock,
-  });
-  return { clock, fixtures, store, writer, service };
+    ...overrides,
+  };
+  const service = new CustomerSuccessService(dependencies);
+  return { clock, fixtures, store, writer, service, dependencies };
 }
