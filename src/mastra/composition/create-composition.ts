@@ -63,6 +63,7 @@ export function createComposition(config: AppConfig): Composition {
       tenantId: config.tenantId,
       token: config.hubspotToken!,
       baseUrl: config.hubspotBaseUrl,
+      renewalProperty: config.hubspotRenewalProperty,
       clock,
     });
     crm = hubspot;

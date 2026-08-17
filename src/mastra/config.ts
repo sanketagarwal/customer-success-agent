@@ -24,6 +24,7 @@ const configSchema = z.object({
   EMBEDDING_MODEL: z.string().min(1).default('openai/text-embedding-3-small'),
   HUBSPOT_PRIVATE_APP_TOKEN: z.string().optional(),
   HUBSPOT_BASE_URL: z.url().default('https://api.hubapi.com'),
+  HUBSPOT_RENEWAL_PROPERTY: z.string().min(1).default('renewal_date'),
 });
 
 export type AppConfig = ReturnType<typeof loadConfig>;
@@ -51,5 +52,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     embeddingModel: parsed.EMBEDDING_MODEL,
     hubspotToken: parsed.HUBSPOT_PRIVATE_APP_TOKEN,
     hubspotBaseUrl: parsed.HUBSPOT_BASE_URL,
+    hubspotRenewalProperty: parsed.HUBSPOT_RENEWAL_PROPERTY,
   };
 }

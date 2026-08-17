@@ -85,6 +85,7 @@ DATA_SOURCE=hubspot
 TENANT_ID=your-tenant
 HUBSPOT_PRIVATE_APP_TOKEN=...
 HUBSPOT_BASE_URL=https://api.hubapi.com
+HUBSPOT_RENEWAL_PROPERTY=renewal_date
 ```
 
 Required private-app access must permit reading companies, notes, tasks, and
@@ -93,6 +94,10 @@ note containing the health summary, account plan, and draft outreach, then
 creates idempotent follow-up tasks from the approved plan due dates. Hidden
 idempotency markers make partial retries safe. It never calls an email-sending
 API.
+
+Set `HUBSPOT_RENEWAL_PROPERTY` to the internal name of your HubSpot company
+renewal-date property. Create that property in HubSpot first if the portal does
+not already have one.
 
 Usage, support, and billing remain fixture-backed in v1. Replace fixture account
 IDs with the corresponding HubSpot company IDs so signals join correctly, or
