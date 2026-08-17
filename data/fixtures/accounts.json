@@ -1,0 +1,283 @@
+{
+  "accounts": [
+    {
+      "tenantId": "demo-tenant",
+      "accountId": "company-healthy",
+      "name": "Northstar Labs",
+      "renewalAt": "2026-10-15T00:00:00.000Z",
+      "ownerId": "csm-alex"
+    },
+    {
+      "tenantId": "demo-tenant",
+      "accountId": "company-declining",
+      "name": "Redwood Retail",
+      "renewalAt": "2026-09-12T00:00:00.000Z",
+      "ownerId": "csm-priya"
+    },
+    {
+      "tenantId": "demo-tenant",
+      "accountId": "company-insufficient",
+      "name": "New Harbor Co",
+      "renewalAt": null,
+      "ownerId": "csm-alex"
+    },
+    {
+      "tenantId": "demo-tenant",
+      "accountId": "company-provider-down",
+      "name": "Atlas Freight",
+      "renewalAt": "2026-11-01T00:00:00.000Z",
+      "ownerId": "csm-priya"
+    }
+  ],
+  "snapshots": {
+    "company-healthy": {
+      "tenantId": "demo-tenant",
+      "accountId": "company-healthy",
+      "window": {
+        "start": "2026-07-20T09:00:00.000Z",
+        "end": "2026-08-17T09:00:00.000Z"
+      },
+      "usage": {
+        "status": "available",
+        "data": {
+          "tenantId": "demo-tenant",
+          "accountId": "company-healthy",
+          "window": {
+            "start": "2026-07-20T09:00:00.000Z",
+            "end": "2026-08-17T09:00:00.000Z"
+          },
+          "points": [
+            {
+              "recordId": "usage-healthy-1",
+              "timestamp": "2026-07-21T09:00:00.000Z",
+              "activeUsers": 81,
+              "licensedSeats": 100,
+              "events": 12400,
+              "adoptionRate": 0.81
+            },
+            {
+              "recordId": "usage-healthy-2",
+              "timestamp": "2026-08-16T09:00:00.000Z",
+              "activeUsers": 86,
+              "licensedSeats": 100,
+              "events": 13950,
+              "adoptionRate": 0.86
+            }
+          ]
+        }
+      },
+      "support": {
+        "status": "available",
+        "data": {
+          "tenantId": "demo-tenant",
+          "accountId": "company-healthy",
+          "window": {
+            "start": "2026-07-20T09:00:00.000Z",
+            "end": "2026-08-17T09:00:00.000Z"
+          },
+          "tickets": [
+            {
+              "recordId": "ticket-healthy-1",
+              "createdAt": "2026-08-02T10:00:00.000Z",
+              "status": "resolved",
+              "priority": "normal",
+              "subject": "Dashboard filter question",
+              "satisfactionScore": 5,
+              "resolutionHours": 2.5
+            }
+          ]
+        }
+      },
+      "billing": {
+        "status": "available",
+        "data": {
+          "tenantId": "demo-tenant",
+          "accountId": "company-healthy",
+          "recordId": "billing-healthy-1",
+          "asOf": "2026-08-17T08:00:00.000Z",
+          "standing": "current",
+          "renewalAt": "2026-10-15T00:00:00.000Z",
+          "daysPastDue": 0,
+          "annualValue": 72000,
+          "currency": "USD"
+        }
+      },
+      "crm": {
+        "status": "available",
+        "data": {
+          "tenantId": "demo-tenant",
+          "accountId": "company-healthy",
+          "window": {
+            "start": "2026-07-20T09:00:00.000Z",
+            "end": "2026-08-17T09:00:00.000Z"
+          },
+          "notes": [
+            {
+              "recordId": "note-healthy-1",
+              "createdAt": "2026-08-12T12:00:00.000Z",
+              "authorId": "csm-alex",
+              "body": "Sponsor confirmed the rollout is on track and the team is seeing value.",
+              "sentiment": "positive"
+            }
+          ]
+        }
+      }
+    },
+    "company-declining": {
+      "tenantId": "demo-tenant",
+      "accountId": "company-declining",
+      "window": {
+        "start": "2026-07-20T09:00:00.000Z",
+        "end": "2026-08-17T09:00:00.000Z"
+      },
+      "usage": {
+        "status": "available",
+        "data": {
+          "tenantId": "demo-tenant",
+          "accountId": "company-declining",
+          "window": {
+            "start": "2026-07-20T09:00:00.000Z",
+            "end": "2026-08-17T09:00:00.000Z"
+          },
+          "points": [
+            {
+              "recordId": "usage-declining-1",
+              "timestamp": "2026-07-21T09:00:00.000Z",
+              "activeUsers": 72,
+              "licensedSeats": 100,
+              "events": 10300,
+              "adoptionRate": 0.72
+            },
+            {
+              "recordId": "usage-declining-2",
+              "timestamp": "2026-08-16T09:00:00.000Z",
+              "activeUsers": 31,
+              "licensedSeats": 100,
+              "events": 3700,
+              "adoptionRate": 0.31
+            }
+          ]
+        }
+      },
+      "support": {
+        "status": "available",
+        "data": {
+          "tenantId": "demo-tenant",
+          "accountId": "company-declining",
+          "window": {
+            "start": "2026-07-20T09:00:00.000Z",
+            "end": "2026-08-17T09:00:00.000Z"
+          },
+          "tickets": [
+            {
+              "recordId": "ticket-declining-1",
+              "createdAt": "2026-08-10T14:00:00.000Z",
+              "status": "open",
+              "priority": "urgent",
+              "subject": "Production export failures",
+              "satisfactionScore": null,
+              "resolutionHours": null
+            }
+          ]
+        }
+      },
+      "billing": {
+        "status": "available",
+        "data": {
+          "tenantId": "demo-tenant",
+          "accountId": "company-declining",
+          "recordId": "billing-declining-1",
+          "asOf": "2026-08-17T08:00:00.000Z",
+          "standing": "past_due",
+          "renewalAt": "2026-09-12T00:00:00.000Z",
+          "daysPastDue": 18,
+          "annualValue": 125000,
+          "currency": "USD"
+        }
+      },
+      "crm": {
+        "status": "available",
+        "data": {
+          "tenantId": "demo-tenant",
+          "accountId": "company-declining",
+          "window": {
+            "start": "2026-07-20T09:00:00.000Z",
+            "end": "2026-08-17T09:00:00.000Z"
+          },
+          "notes": [
+            {
+              "recordId": "note-declining-1",
+              "createdAt": "2026-08-13T11:30:00.000Z",
+              "authorId": "csm-priya",
+              "body": "Executive sponsor is concerned about reliability and has paused the expansion discussion.",
+              "sentiment": "negative"
+            }
+          ]
+        }
+      }
+    },
+    "company-insufficient": {
+      "tenantId": "demo-tenant",
+      "accountId": "company-insufficient",
+      "window": {
+        "start": "2026-07-20T09:00:00.000Z",
+        "end": "2026-08-17T09:00:00.000Z"
+      },
+      "usage": { "status": "empty" },
+      "support": { "status": "empty" },
+      "billing": { "status": "empty" },
+      "crm": { "status": "empty" }
+    },
+    "company-provider-down": {
+      "tenantId": "demo-tenant",
+      "accountId": "company-provider-down",
+      "window": {
+        "start": "2026-07-20T09:00:00.000Z",
+        "end": "2026-08-17T09:00:00.000Z"
+      },
+      "usage": {
+        "status": "available",
+        "data": {
+          "tenantId": "demo-tenant",
+          "accountId": "company-provider-down",
+          "window": {
+            "start": "2026-07-20T09:00:00.000Z",
+            "end": "2026-08-17T09:00:00.000Z"
+          },
+          "points": [
+            {
+              "recordId": "usage-down-1",
+              "timestamp": "2026-08-16T09:00:00.000Z",
+              "activeUsers": 44,
+              "licensedSeats": 60,
+              "events": 6700,
+              "adoptionRate": 0.73
+            }
+          ]
+        }
+      },
+      "support": {
+        "status": "unavailable",
+        "error": {
+          "provider": "fixture-support",
+          "message": "Simulated support transport outage"
+        }
+      },
+      "billing": {
+        "status": "available",
+        "data": {
+          "tenantId": "demo-tenant",
+          "accountId": "company-provider-down",
+          "recordId": "billing-down-1",
+          "asOf": "2026-08-17T08:00:00.000Z",
+          "standing": "current",
+          "renewalAt": "2026-11-01T00:00:00.000Z",
+          "daysPastDue": 0,
+          "annualValue": 54000,
+          "currency": "USD"
+        }
+      },
+      "crm": { "status": "empty" }
+    }
+  }
+}
