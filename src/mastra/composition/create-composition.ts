@@ -7,7 +7,7 @@ import { MockCrmWriter } from '../adapters/fixture/mock-crm-writer.js';
 import { HubSpotAdapter } from '../adapters/hubspot/hubspot-adapter.js';
 import { MastraCustomerSuccessIntelligence } from '../adapters/model/mastra-intelligence.js';
 import { createCustomerSuccessAgent } from '../agents/customer-success-agent.js';
-import { FixedClock, SystemClock } from '../clock.js';
+import { FixedClock } from '../clock.js';
 import type { AppConfig } from '../config.js';
 import { LibSqlOperationalStore } from '../memory/operational-stores.js';
 import type {
@@ -32,9 +32,13 @@ export interface Composition {
 }
 
 export function createComposition(config: AppConfig): Composition {
-  const clock: Clock =
-    config.dataSource === 'fixture' ? new FixedClock(new Date(config.fixtureNow)) : new SystemClock();
-  const fixture = new FixtureRepositories(config.fixturePath);
+  // Usage, support, and billing remain fixture-backed in both v1 modes, so the
+  // operational clock stays pinned until those ports use live providers.
+  const clock: Clock = new FixedClock(new Date(config.fixtureNow));
+  const fixture = new FixtureRepositories(
+    config.fixturePath,
+    config.dataSource === 'hubspot' ? { sourceTenantId: config.fixtureTenantId } : {},
+  );
   const operationalStore = new LibSqlOperationalStore(config.databaseUrl, config.tursoAuthToken);
   const storage = new LibSQLStore({
     id: 'customer-success-storage',

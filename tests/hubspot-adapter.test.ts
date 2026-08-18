@@ -54,11 +54,58 @@ describe('HubSpot adapter', () => {
     expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({ Authorization: 'Bearer test-token' });
   });
 
+  it('filters CRM notes by their timeline timestamp instead of API creation time', async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes('/objects/companies/') && url.includes('associations=notes')) {
+        return jsonResponse({
+          id: '12345',
+          createdAt: '2026-09-01T00:00:00.000Z',
+          updatedAt: '2026-09-01T00:00:00.000Z',
+          properties: {},
+          associations: { notes: { results: [{ id: 'note-1' }] } },
+        });
+      }
+      if (url.includes('/objects/notes/batch/read')) {
+        return jsonResponse({
+          results: [{
+            id: 'note-1',
+            createdAt: '2026-09-01T00:00:00.000Z',
+            updatedAt: '2026-09-01T00:00:00.000Z',
+            properties: {
+              hs_timestamp: '1786536000000',
+              hs_note_body: 'Timeline note',
+              hubspot_owner_id: null,
+            },
+          }],
+        });
+      }
+      throw new Error(`Unexpected HubSpot request: ${url}`);
+    });
+    const adapter = new HubSpotAdapter({
+      tenantId: 'tenant',
+      token: 'test-token',
+      baseUrl: 'https://api.hubapi.com',
+      clock: new FixedClock(new Date(fixtureAsOf)),
+      intents: new InMemoryOperationalStore(),
+      fetch: fetcher,
+    });
+
+    await expect(adapter.getCrmNotes({
+      tenantId: 'tenant',
+      accountId: '12345',
+      window: { start: '2026-08-01T00:00:00.000Z', end: fixtureAsOf },
+    })).resolves.toMatchObject({
+      status: 'available',
+      data: { notes: [{ recordId: 'note-1', createdAt: '2026-08-12T12:00:00.000Z' }] },
+    });
+  });
+
   it('writes internal notes and follow-up tasks without calling an email API', async () => {
     const prepared = await createTestSystem().service.prepare({
       runId: 'hubspot-write',
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     let createdObject = 0;
@@ -71,7 +118,7 @@ describe('HubSpot adapter', () => {
       }
       if (url.includes('/objects/companies/') && url.includes('associations=tasks')) {
         return jsonResponse({
-          id: 'company-declining',
+          id: '340734348989',
           createdAt: fixtureAsOf,
           updatedAt: fixtureAsOf,
           properties: {},
@@ -80,7 +127,7 @@ describe('HubSpot adapter', () => {
       }
       if (url.includes('/objects/companies/') && url.includes('associations=notes')) {
         return jsonResponse({
-          id: 'company-declining',
+          id: '340734348989',
           createdAt: fixtureAsOf,
           updatedAt: fixtureAsOf,
           properties: {},
@@ -127,7 +174,7 @@ describe('HubSpot adapter', () => {
     const prepared = await createTestSystem().service.prepare({
       runId: 'hubspot-tenant-guard',
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     const fetcher = vi.fn<typeof fetch>();
@@ -161,7 +208,7 @@ describe('HubSpot adapter', () => {
     const prepared = await createTestSystem().service.prepare({
       runId: 'hubspot-ambiguous-write',
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     const idempotencyKey = 'ambiguous-write';
@@ -187,7 +234,7 @@ describe('HubSpot adapter', () => {
       }
       if (url.includes('/objects/companies/') && url.includes('associations=tasks')) {
         return jsonResponse({
-          ...object('company-declining', {}),
+          ...object('340734348989', {}),
           associations: { tasks: { results: taskCommitted ? [{ id: 'task-1' }] : [] } },
         });
       }
@@ -196,7 +243,7 @@ describe('HubSpot adapter', () => {
       }
       if (url.includes('/objects/companies/') && url.includes('associations=notes')) {
         return jsonResponse({
-          ...object('company-declining', {}),
+          ...object('340734348989', {}),
           associations: { notes: { results: noteCommitted ? [{ id: 'note-1' }] : [] } },
         });
       }
@@ -256,7 +303,7 @@ describe('HubSpot adapter', () => {
     const prepared = await createTestSystem().service.prepare({
       runId: 'hubspot-invisible-commit',
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     let taskCreates = 0;
@@ -273,7 +320,7 @@ describe('HubSpot adapter', () => {
           return jsonResponse({ message: 'temporary reconciliation denial' }, 401);
         }
         return jsonResponse({
-          id: 'company-declining',
+          id: '340734348989',
           createdAt: fixtureAsOf,
           updatedAt: fixtureAsOf,
           properties: {},
@@ -338,7 +385,7 @@ describe('HubSpot adapter', () => {
     const prepared = await createTestSystem().service.prepare({
       runId: 'hubspot-local-completion-failure',
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     let taskCreates = 0;
@@ -351,7 +398,7 @@ describe('HubSpot adapter', () => {
       }
       if (url.includes('/objects/companies/') && url.includes('associations=tasks')) {
         return jsonResponse({
-          id: 'company-declining',
+          id: '340734348989',
           createdAt: fixtureAsOf,
           updatedAt: fixtureAsOf,
           properties: {},

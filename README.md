@@ -46,10 +46,10 @@ Expected demo outcomes:
 
 | Account | Outcome |
 | --- | --- |
-| `company-healthy` | `no_action` |
-| `company-declining` | `awaiting_approval` |
-| `company-insufficient` | `insufficient_data` |
-| `company-provider-down` | `unknown_retry` |
+| `340739743463` | `no_action` |
+| `340734348989` | `awaiting_approval` |
+| `340737895140` | `insufficient_data` |
+| `340878324429` | `unknown_retry` |
 
 ## Approval flow
 
@@ -89,6 +89,7 @@ Set:
 ```env
 DATA_SOURCE=hubspot
 TENANT_ID=your-tenant
+FIXTURE_TENANT_ID=demo-tenant
 HUBSPOT_PRIVATE_APP_TOKEN=...
 HUBSPOT_BASE_URL=https://api.hubapi.com
 HUBSPOT_RENEWAL_PROPERTY=renewal_date
@@ -115,7 +116,11 @@ not already have one.
 
 Usage, support, and billing remain fixture-backed in v1. Replace fixture account
 IDs with the corresponding HubSpot company IDs so signals join correctly, or
-implement new adapters against their existing ports.
+implement new adapters against their existing ports. `FIXTURE_TENANT_ID` names
+the tenant stored in the bundled fixture file, while `TENANT_ID` remains the
+runtime tenant exposed to the workflow. Hybrid runs deliberately use
+`FIXTURE_NOW` as their clock so the bundled evidence does not age out; switch to
+a system clock when all source ports are backed by live providers.
 
 ## Architecture
 

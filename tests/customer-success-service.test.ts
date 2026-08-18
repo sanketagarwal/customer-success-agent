@@ -15,10 +15,10 @@ describe('customer success service', () => {
   it('produces the expected fixture dispositions', async () => {
     const { service } = createTestSystem();
     const cases = [
-      ['company-healthy', 'no_action'],
-      ['company-declining', 'awaiting_approval'],
-      ['company-insufficient', 'insufficient_data'],
-      ['company-provider-down', 'unknown_retry'],
+      ['340739743463', 'no_action'],
+      ['340734348989', 'awaiting_approval'],
+      ['340737895140', 'insufficient_data'],
+      ['340878324429', 'unknown_retry'],
     ] as const;
 
     for (const [accountId, outcome] of cases) {
@@ -37,11 +37,11 @@ describe('customer success service', () => {
     const prepared = await service.prepare({
       runId: 'fabrication-test',
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     expect(prepared.assessment).not.toBeNull();
-    const snapshot = await service.collect('demo-tenant', 'company-declining', {
+    const snapshot = await service.collect('demo-tenant', '340734348989', {
       start: '2026-07-20T09:00:00.000Z',
       end: fixtureAsOf,
     });
@@ -116,27 +116,27 @@ describe('customer success service', () => {
     const prepared = await service.prepare({
       runId: 'model-identity-isolation',
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
 
     expect(prepared.assessment).toMatchObject({
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     expect(prepared.plan).toMatchObject({
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     expect(prepared.outreach).toMatchObject({
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     expect(await store.get('victim-tenant', 'victim-account')).toBeNull();
-    expect(await store.get('demo-tenant', 'company-declining')).not.toBeNull();
+    expect(await store.get('demo-tenant', '340734348989')).not.toBeNull();
   });
 
   it('creates a baseline, then calculates stable drift and persistent factors', async () => {
@@ -144,13 +144,13 @@ describe('customer success service', () => {
     const first = await service.prepare({
       runId: 'drift-1',
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     const second = await service.prepare({
       runId: 'drift-2',
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     expect(first.drift?.baseline).toBe(true);
@@ -163,11 +163,11 @@ describe('customer success service', () => {
     await service.prepare({
       runId: 'isolation-a',
       tenantId: 'demo-tenant',
-      accountId: 'company-healthy',
+      accountId: '340739743463',
       asOf: fixtureAsOf,
     });
-    expect(await store.get('demo-tenant', 'company-healthy')).not.toBeNull();
-    expect(await store.get('demo-tenant', 'company-declining')).toBeNull();
+    expect(await store.get('demo-tenant', '340739743463')).not.toBeNull();
+    expect(await store.get('demo-tenant', '340734348989')).toBeNull();
     expect(scopeKey('tenant-a', 'same')).not.toBe(scopeKey('tenant-b', 'same'));
   });
 
@@ -176,7 +176,7 @@ describe('customer success service', () => {
     const prepared = await service.prepare({
       runId: 'approval-write',
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     const decision: ApprovalDecision = {
@@ -199,7 +199,7 @@ describe('customer success service', () => {
     const rejected = await rejectedSystem.service.prepare({
       runId: 'approval-reject',
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     const rejection = await rejectedSystem.service.finalize(rejected, {
@@ -216,7 +216,7 @@ describe('customer success service', () => {
     const stale = await staleSystem.service.prepare({
       runId: 'approval-stale',
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     const staleResult = await staleSystem.service.finalize(stale, {
@@ -263,7 +263,7 @@ describe('customer success service', () => {
     const prepared = await system.service.prepare({
       runId: 'approval-new-source',
       tenantId: 'demo-tenant',
-      accountId: 'company-declining',
+      accountId: '340734348989',
       asOf: fixtureAsOf,
     });
     now = '2026-08-18T09:00:00.000Z';

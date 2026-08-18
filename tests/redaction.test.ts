@@ -13,7 +13,7 @@ describe('observability redaction', () => {
       traceId: 'trace-1',
       spanId: 'span-1',
       input: {
-        accountId: 'company-declining',
+        accountId: '340734348989',
         token: 'private-token',
         body: 'customer outreach text',
         notes: [{ body: 'private CRM note' }],
@@ -24,7 +24,7 @@ describe('observability redaction', () => {
     } as unknown as Parameters<SensitiveDataFilter['process']>[0];
     const processed = filter.process(span);
     expect(processed.input).toMatchObject({
-      accountId: 'company-declining',
+      accountId: '340734348989',
       token: '[REDACTED]',
       body: '[REDACTED]',
       notes: [{ body: '[REDACTED]' }],
@@ -34,7 +34,7 @@ describe('observability redaction', () => {
 
   it('removes customer free text before constructing serialized model prompts', async () => {
     const { service } = createTestSystem();
-    const snapshot = await service.collect('demo-tenant', 'company-declining', {
+    const snapshot = await service.collect('demo-tenant', '340734348989', {
       start: '2026-07-20T09:00:00.000Z',
       end: fixtureAsOf,
     });
