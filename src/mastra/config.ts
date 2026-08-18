@@ -10,6 +10,7 @@ const booleanString = z
 const configSchema = z.object({
   DATA_SOURCE: z.enum(['fixture', 'hubspot']).default('fixture'),
   TENANT_ID: z.string().min(1).default('demo-tenant'),
+  FIXTURE_TENANT_ID: z.string().min(1).default('demo-tenant'),
   FIXTURE_PATH: z.string().default('./data/fixtures/accounts.json'),
   FIXTURE_NOW: z.iso.datetime({ offset: true }).default('2026-08-17T09:00:00.000Z'),
   MASTRA_DB_URL: z.string().default('file:./mastra.db'),
@@ -38,6 +39,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
   return {
     dataSource: parsed.DATA_SOURCE,
     tenantId: parsed.TENANT_ID,
+    fixtureTenantId: parsed.FIXTURE_TENANT_ID,
     fixturePath: resolve(projectDirectory, parsed.FIXTURE_PATH),
     fixtureNow: parsed.FIXTURE_NOW,
     databaseUrl: parsed.MASTRA_DB_URL,

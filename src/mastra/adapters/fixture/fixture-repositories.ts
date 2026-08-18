@@ -32,6 +32,10 @@ const fixtureBookSchema = z.object({
 
 type FixtureBook = z.infer<typeof fixtureBookSchema>;
 
+export interface FixtureRepositoryOptions {
+  sourceTenantId?: string;
+}
+
 function inside(timestamp: string, query: AccountQuery): boolean {
   return Date.parse(timestamp) >= Date.parse(query.window.start) &&
     Date.parse(timestamp) <= Date.parse(query.window.end);
@@ -42,7 +46,10 @@ export class FixtureRepositories
 {
   private bookPromise?: Promise<FixtureBook>;
 
-  constructor(private readonly fixturePath: string) {}
+  constructor(
+    private readonly fixturePath: string,
+    private readonly options: FixtureRepositoryOptions = {},
+  ) {}
 
   private load(): Promise<FixtureBook> {
     this.bookPromise ??= readFile(this.fixturePath, 'utf8').then((value) =>
@@ -54,7 +61,8 @@ export class FixtureRepositories
   private async snapshot(query: AccountQuery): Promise<SourceSnapshot | null> {
     const book = await this.load();
     const snapshot = book.snapshots[query.accountId];
-    if (!snapshot || snapshot.tenantId !== query.tenantId) return null;
+    const sourceTenantId = this.options.sourceTenantId ?? query.tenantId;
+    if (!snapshot || snapshot.tenantId !== sourceTenantId) return null;
     return snapshot;
   }
 
