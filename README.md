@@ -46,10 +46,10 @@ Expected demo outcomes:
 
 | Account | Outcome |
 | --- | --- |
-| `company-healthy` | `no_action` |
-| `company-declining` | `awaiting_approval` |
-| `company-insufficient` | `insufficient_data` |
-| `company-provider-down` | `unknown_retry` |
+| `340739743463` | `no_action` |
+| `340734348989` | `awaiting_approval` |
+| `340737895140` | `insufficient_data` |
+| `340878324429` | `unknown_retry` |
 
 ## Approval flow
 

@@ -129,8 +129,11 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
     try {
       const notes = await this.readCompanyNotes(query.accountId);
       const filtered = notes.filter(
-        (note) => Date.parse(note.createdAt) >= Date.parse(query.window.start) &&
-          Date.parse(note.createdAt) <= Date.parse(query.window.end),
+        (note) => {
+          const occurredAt = note.properties.hs_timestamp ?? note.createdAt;
+          return Date.parse(occurredAt) >= Date.parse(query.window.start) &&
+            Date.parse(occurredAt) <= Date.parse(query.window.end);
+        },
       );
       if (filtered.length === 0) return { status: 'empty' };
       return {
