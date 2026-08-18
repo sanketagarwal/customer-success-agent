@@ -73,7 +73,7 @@ describe('HubSpot adapter', () => {
             createdAt: '2026-09-01T00:00:00.000Z',
             updatedAt: '2026-09-01T00:00:00.000Z',
             properties: {
-              hs_timestamp: '2026-08-12T12:00:00.000Z',
+              hs_timestamp: '1786536000000',
               hs_note_body: 'Timeline note',
               hubspot_owner_id: null,
             },

@@ -128,13 +128,12 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
     this.assertTenant(query.tenantId);
     try {
       const notes = await this.readCompanyNotes(query.accountId);
-      const filtered = notes.filter(
-        (note) => {
-          const occurredAt = note.properties.hs_timestamp ?? note.createdAt;
-          return Date.parse(occurredAt) >= Date.parse(query.window.start) &&
-            Date.parse(occurredAt) <= Date.parse(query.window.end);
-        },
-      );
+      const filtered = notes.flatMap((note) => {
+        const occurredAt = normalizeDate(note.properties.hs_timestamp) ?? normalizeDate(note.createdAt);
+        if (!occurredAt || Date.parse(occurredAt) < Date.parse(query.window.start) ||
+          Date.parse(occurredAt) > Date.parse(query.window.end)) return [];
+        return [{ note, occurredAt }];
+      });
       if (filtered.length === 0) return { status: 'empty' };
       return {
         status: 'available',
@@ -142,9 +141,9 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
           tenantId: query.tenantId,
           accountId: query.accountId,
           window: query.window,
-          notes: filtered.map((note) => ({
+          notes: filtered.map(({ note, occurredAt }) => ({
             recordId: note.id,
-            createdAt: note.properties.hs_timestamp ?? note.createdAt,
+            createdAt: occurredAt,
             authorId: note.properties.hubspot_owner_id ?? null,
             body: note.properties.hs_note_body ?? '',
             sentiment: 'unknown',
