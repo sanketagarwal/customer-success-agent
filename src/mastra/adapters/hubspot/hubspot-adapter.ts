@@ -17,15 +17,20 @@ const objectSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   properties: z.record(z.string(), z.string().nullable()).default({}),
-  associations: z.record(
-    z.string(),
-    z.object({ results: z.array(z.object({ id: z.string(), type: z.string().optional() })) }),
-  ).optional(),
 });
 
 const pageSchema = z.object({
   results: z.array(objectSchema),
   paging: z.object({ next: z.object({ after: z.string() }) }).optional(),
+});
+
+const hubSpotIdSchema = z
+  .union([z.string().min(1), z.number().int().nonnegative()])
+  .transform(String);
+
+const associationPageSchema = z.object({
+  results: z.array(z.object({ toObjectId: hubSpotIdSchema })),
+  paging: z.object({ next: z.object({ after: hubSpotIdSchema }) }).optional(),
 });
 
 export interface HubSpotAdapterOptions {
@@ -376,23 +381,34 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
     objectType: 'notes' | 'tasks',
     properties: string[],
   ) {
-    const company = objectSchema.parse(
-      await this.request(
-        `/crm/v3/objects/companies/${encodeURIComponent(companyId)}?associations=${objectType}`,
-      ),
-    );
-    const ids = company.associations?.[objectType]?.results.map((association) => association.id) ?? [];
+    const ids: string[] = [];
+    let after: string | undefined;
+    do {
+      const params = new URLSearchParams({ limit: '500' });
+      if (after) params.set('after', after);
+      const page = associationPageSchema.parse(
+        await this.request(
+          `/crm/v4/objects/companies/${encodeURIComponent(companyId)}/associations/${objectType}?${params}`,
+        ),
+      );
+      ids.push(...page.results.map((association) => association.toObjectId));
+      after = page.paging?.next.after;
+    } while (after);
     if (ids.length === 0) return [];
-    const batch = z.object({ results: z.array(objectSchema) }).parse(
-      await this.request(`/crm/v3/objects/${objectType}/batch/read`, {
-        method: 'POST',
-        body: JSON.stringify({
-          properties,
-          inputs: ids.map((id) => ({ id })),
+    const objects = [];
+    for (const batchIds of chunk(ids, 100)) {
+      const batch = z.object({ results: z.array(objectSchema) }).parse(
+        await this.request(`/crm/v3/objects/${objectType}/batch/read`, {
+          method: 'POST',
+          body: JSON.stringify({
+            properties,
+            inputs: batchIds.map((id) => ({ id })),
+          }),
         }),
-      }),
-    );
-    return batch.results;
+      );
+      objects.push(...batch.results);
+    }
+    return objects;
   }
 
   private async getTaskCompanyAssociationType(): Promise<number> {
@@ -418,6 +434,13 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
     });
     return this.taskCompanyAssociationType;
   }
+}
+
+function chunk<T>(values: readonly T[], size: number): T[][] {
+  return Array.from(
+    { length: Math.ceil(values.length / size) },
+    (_, index) => values.slice(index * size, (index + 1) * size),
+  );
 }
 
 function normalizeDate(value: string | null | undefined): string | null {

@@ -27,6 +27,30 @@ function evidenceNarrative(evidence: readonly Evidence[]): string {
   return evidence.map(evidenceFact).join('; ');
 }
 
+function actionTitle(action: AccountPlan['actions'][number]): string {
+  if (action.evidence.some((item) => item.ref.source === 'usage')) {
+    return 'Review product adoption signals and recovery steps';
+  }
+  if (action.evidence.some((item) => item.ref.source === 'support')) {
+    return 'Resolve the verified support risk';
+  }
+  if (action.evidence.some((item) => item.ref.fieldPath === 'renewalAt')) {
+    return 'Align on renewal timing and next steps';
+  }
+  if (action.evidence.some((item) => item.ref.source === 'billing')) {
+    return 'Resolve the verified billing risk';
+  }
+  if (action.evidence.some((item) => item.ref.source === 'crm')) {
+    return 'Review the verified relationship signal';
+  }
+  return `Complete verified ${action.owner} follow-up`;
+}
+
+function isMeaningfulEvidence(value: Evidence['value']): boolean {
+  return value !== null &&
+    !(typeof value === 'string' && ['', 'unknown', '[REDACTED]'].includes(value.trim()));
+}
+
 export function canonicalizeAssessmentNarratives(
   assessment: HealthAssessment,
 ): HealthAssessment {
@@ -50,7 +74,7 @@ export function canonicalizePlanNarratives(plan: AccountPlan): AccountPlan {
     actions: plan.actions.map((action) => ({
       ...action,
       evidence: action.evidence.map(canonicalizeEvidence),
-      title: `Complete evidence-backed ${action.owner} follow-up`,
+      title: actionTitle(action),
       rationale: evidenceNarrative(action.evidence.map(canonicalizeEvidence)),
     })),
   };
@@ -78,6 +102,7 @@ function unresolvedEvidence(
   return entries.flatMap((entry, entryIndex) =>
     entry.evidence.flatMap((item, evidenceIndex) =>
       evidenceMatchesSource(item, snapshot) &&
+      isMeaningfulEvidence(item.value) &&
       item.metricOrQuote === `${item.ref.source}.${item.ref.fieldPath}`
         ? []
         : [`${prefix}[${entryIndex}].evidence[${evidenceIndex}]`],

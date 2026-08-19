@@ -20,10 +20,11 @@ const evidencePolicy = [
   'cite only primitive values exactly as they appear in the normalized source records;',
   'never cite support subject, CRM body, CRM authorId, or any field whose value is [REDACTED] or null;',
   'use structured CRM sentiment rather than CRM body text;',
+  'unknown, empty, and redacted values describe missing information and must never be treated as risk evidence;',
   'omit a risk, action, or claim when no permitted evidence supports it.',
 ].join(' ');
 
-export function modelSafeSnapshot(snapshot: SourceSnapshot): SourceSnapshot {
+function modelSafeSnapshot(snapshot: SourceSnapshot): SourceSnapshot {
   const safe = structuredClone(snapshot);
   if (safe.support.status === 'available') {
     safe.support.data.tickets = safe.support.data.tickets.map((ticket) => ({

@@ -123,8 +123,16 @@ describe('template primitives', () => {
     expect(event).toBeDefined();
     const store = new LibSqlOperationalStore(':memory:');
     try {
-      await store.recordMonitoringEvent(event!);
-      await expect(store.listMonitoringEvents('demo-tenant')).resolves.toEqual([event]);
+      const first = { ...event!, eventId: 'z-first', riskScore: 10 };
+      const second = { ...event!, eventId: 'a-second', riskScore: 20 };
+      await store.recordMonitoringEvent(first);
+      await store.recordMonitoringEvent(second);
+      const persisted = await store.listMonitoringEvents('demo-tenant');
+      expect(persisted).toEqual([first, second]);
+      expect(
+        buildCustomerSuccessMonitoringReport('demo-tenant', persisted, runtime.asOf)
+          .accounts[0]?.latestRiskScore,
+      ).toBe(20);
     } finally {
       store.close();
     }

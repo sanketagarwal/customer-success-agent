@@ -57,14 +57,8 @@ describe('HubSpot adapter', () => {
   it('filters CRM notes by their timeline timestamp instead of API creation time', async () => {
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
-      if (url.includes('/objects/companies/') && url.includes('associations=notes')) {
-        return jsonResponse({
-          id: '12345',
-          createdAt: '2026-09-01T00:00:00.000Z',
-          updatedAt: '2026-09-01T00:00:00.000Z',
-          properties: {},
-          associations: { notes: { results: [{ id: 'note-1' }] } },
-        });
+      if (url.includes('/objects/companies/') && url.includes('/associations/notes')) {
+        return jsonResponse({ results: [{ toObjectId: 'note-1' }] });
       }
       if (url.includes('/objects/notes/batch/read')) {
         return jsonResponse({
@@ -101,6 +95,85 @@ describe('HubSpot adapter', () => {
     });
   });
 
+  it('reads large association sets in HubSpot-sized batches', async () => {
+    const associationIds = Array.from({ length: 101 }, (_, index) => `note-${index + 1}`);
+    const associationPages: string[] = [];
+    const batchSizes: number[] = [];
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/objects/companies/') && url.includes('/associations/notes')) {
+        const after = new URL(url).searchParams.get('after');
+        associationPages.push(after ?? 'first');
+        return jsonResponse({
+          results: (after ? associationIds.slice(100) : associationIds.slice(0, 100))
+            .map((toObjectId) => ({ toObjectId: Number(toObjectId.slice(5)) })),
+          ...(after ? {} : { paging: { next: { after: 'page-2' } } }),
+        });
+      }
+      if (url.includes('/objects/notes/batch/read')) {
+        const body = JSON.parse(String(init?.body)) as { inputs: Array<{ id: string }> };
+        batchSizes.push(body.inputs.length);
+        return jsonResponse({
+          results: body.inputs.map(({ id }) => ({
+            id,
+            createdAt: fixtureAsOf,
+            updatedAt: fixtureAsOf,
+            properties: {
+              hs_timestamp: fixtureAsOf,
+              hs_note_body: `Note ${id}`,
+              hubspot_owner_id: null,
+            },
+          })),
+        });
+      }
+      throw new Error(`Unexpected HubSpot request: ${url}`);
+    });
+    const adapter = new HubSpotAdapter({
+      tenantId: 'tenant',
+      token: 'test-token',
+      baseUrl: 'https://api.hubapi.com',
+      clock: new FixedClock(new Date(fixtureAsOf)),
+      intents: new InMemoryOperationalStore(),
+      fetch: fetcher,
+    });
+
+    const result = await adapter.getCrmNotes({
+      tenantId: 'tenant',
+      accountId: '12345',
+      window: { start: '2026-08-01T00:00:00.000Z', end: fixtureAsOf },
+    });
+    expect(result).toMatchObject({ status: 'available' });
+    if (result.status !== 'available') return;
+    expect(result.data.notes).toHaveLength(101);
+    expect(associationPages).toEqual(['first', 'page-2']);
+    expect(batchSizes.sort((left, right) => right - left)).toEqual([100, 1]);
+  });
+
+  it('rejects malformed association IDs before issuing a batch read', async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes('/objects/companies/') && url.includes('/associations/notes')) {
+        return jsonResponse({ results: [{ toObjectId: false }] });
+      }
+      throw new Error(`Unexpected HubSpot request: ${url}`);
+    });
+    const adapter = new HubSpotAdapter({
+      tenantId: 'tenant',
+      token: 'test-token',
+      baseUrl: 'https://api.hubapi.com',
+      clock: new FixedClock(new Date(fixtureAsOf)),
+      intents: new InMemoryOperationalStore(),
+      fetch: fetcher,
+    });
+
+    await expect(adapter.getCrmNotes({
+      tenantId: 'tenant',
+      accountId: '12345',
+      window: { start: '2026-08-01T00:00:00.000Z', end: fixtureAsOf },
+    })).resolves.toMatchObject({ status: 'unavailable' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it('writes internal notes and follow-up tasks without calling an email API', async () => {
     const prepared = await createTestSystem().service.prepare({
       runId: 'hubspot-write',
@@ -116,23 +189,11 @@ describe('HubSpot adapter', () => {
           results: [{ typeId: 192, category: 'HUBSPOT_DEFINED', label: null }],
         });
       }
-      if (url.includes('/objects/companies/') && url.includes('associations=tasks')) {
-        return jsonResponse({
-          id: '340734348989',
-          createdAt: fixtureAsOf,
-          updatedAt: fixtureAsOf,
-          properties: {},
-          associations: { tasks: { results: [] } },
-        });
+      if (url.includes('/objects/companies/') && url.includes('/associations/tasks')) {
+        return jsonResponse({ results: [] });
       }
-      if (url.includes('/objects/companies/') && url.includes('associations=notes')) {
-        return jsonResponse({
-          id: '340734348989',
-          createdAt: fixtureAsOf,
-          updatedAt: fixtureAsOf,
-          properties: {},
-          associations: { notes: { results: [] } },
-        });
+      if (url.includes('/objects/companies/') && url.includes('/associations/notes')) {
+        return jsonResponse({ results: [] });
       }
       if (init?.method === 'POST' && (url.endsWith('/tasks') || url.endsWith('/notes'))) {
         createdObject += 1;
@@ -232,19 +293,17 @@ describe('HubSpot adapter', () => {
           results: [{ typeId: 192, category: 'HUBSPOT_DEFINED', label: null }],
         });
       }
-      if (url.includes('/objects/companies/') && url.includes('associations=tasks')) {
+      if (url.includes('/objects/companies/') && url.includes('/associations/tasks')) {
         return jsonResponse({
-          ...object('340734348989', {}),
-          associations: { tasks: { results: taskCommitted ? [{ id: 'task-1' }] : [] } },
+          results: taskCommitted ? [{ toObjectId: 'task-1' }] : [],
         });
       }
       if (url.includes('/objects/tasks/batch/read')) {
         return jsonResponse({ results: [object('task-1', { hs_task_body: taskMarker })] });
       }
-      if (url.includes('/objects/companies/') && url.includes('associations=notes')) {
+      if (url.includes('/objects/companies/') && url.includes('/associations/notes')) {
         return jsonResponse({
-          ...object('340734348989', {}),
-          associations: { notes: { results: noteCommitted ? [{ id: 'note-1' }] : [] } },
+          results: noteCommitted ? [{ toObjectId: 'note-1' }] : [],
         });
       }
       if (url.includes('/objects/notes/batch/read')) {
@@ -315,17 +374,11 @@ describe('HubSpot adapter', () => {
           results: [{ typeId: 192, category: 'HUBSPOT_DEFINED', label: null }],
         });
       }
-      if (url.includes('/objects/companies/') && url.includes('associations=tasks')) {
+      if (url.includes('/objects/companies/') && url.includes('/associations/tasks')) {
         if (taskCreates > 0 && failReconciliationRead) {
           return jsonResponse({ message: 'temporary reconciliation denial' }, 401);
         }
-        return jsonResponse({
-          id: '340734348989',
-          createdAt: fixtureAsOf,
-          updatedAt: fixtureAsOf,
-          properties: {},
-          associations: { tasks: { results: [] } },
-        });
+        return jsonResponse({ results: [] });
       }
       if (init?.method === 'POST' && url.endsWith('/tasks')) {
         taskCreates += 1;
@@ -396,14 +449,8 @@ describe('HubSpot adapter', () => {
           results: [{ typeId: 192, category: 'HUBSPOT_DEFINED', label: null }],
         });
       }
-      if (url.includes('/objects/companies/') && url.includes('associations=tasks')) {
-        return jsonResponse({
-          id: '340734348989',
-          createdAt: fixtureAsOf,
-          updatedAt: fixtureAsOf,
-          properties: {},
-          associations: { tasks: { results: [] } },
-        });
+      if (url.includes('/objects/companies/') && url.includes('/associations/tasks')) {
+        return jsonResponse({ results: [] });
       }
       if (init?.method === 'POST' && url.endsWith('/tasks')) {
         taskCreates += 1;

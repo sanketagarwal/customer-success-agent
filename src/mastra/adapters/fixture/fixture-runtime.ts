@@ -12,7 +12,7 @@ import { DeterministicCustomerSuccessIntelligence } from './deterministic-intell
 import { FixtureRepositories } from './fixture-repositories.js';
 import { MockCrmWriter } from './mock-crm-writer.js';
 
-export const fixtureAsOf = '2026-08-17T09:00:00.000Z';
+const fixtureAsOf = '2026-08-17T09:00:00.000Z';
 
 export function createFixtureRuntime(options: {
   fixturePath?: string;

@@ -27,7 +27,8 @@ required observed `value`. Evidence resolution succeeds only when the record,
 field path, time window, and exact primitive value resolve in the normalized
 source snapshot used for the run. Customer-specific prose is rendered from
 these verified facts; arbitrary generated prose cannot pass the deterministic
-grounding gate.
+grounding gate. Null, empty, `unknown`, and redacted values describe missing
+information and cannot support a risk, action, or outreach claim.
 
 The canonical schemas are:
 
@@ -44,9 +45,9 @@ The canonical schemas are:
   resolved factor IDs.
 - `AccountPlan`: evidence-backed goals and actions.
 - `OutreachDraft`: a draft-only subject/body with evidence-backed claims.
-- `RunOutcome`: `no_action`, `action_required`, `awaiting_approval`,
-  `approved`, `rejected`, `written`, `insufficient_data`, `unknown_retry`,
-  `grounding_failed`, `stale_approval`, or `failed`.
+- `RunOutcome`: `no_action`, `awaiting_approval`, `rejected`, `written`,
+  `insufficient_data`, `unknown_retry`, `grounding_failed`, `stale_approval`,
+  or `failed`.
 
 ### Approval
 
@@ -81,7 +82,8 @@ dependencies from the composition root and never inspect `process.env`.
   memory resources. No lookup may omit either component.
 - `idempotencyKey(tenantId, accountId, artifactType, runOrAsOf)` identifies one
   logical CRM mutation. Replays return the original result.
-- `evidenceResolves(ref, sources)` is deterministic and provider-neutral.
+- `evidenceMatchesSource(evidence, sources)` is deterministic and
+  provider-neutral.
 - Evidence must match the exact primitive source value and source window;
   customer-specific prose is rendered only from verified evidence.
 - Request-scoped tenant/account/as-of values are authoritative. A model cannot
