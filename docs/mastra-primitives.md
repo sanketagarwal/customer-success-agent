@@ -70,10 +70,11 @@ unavailable data is empty.
 
 ## Structured outputs and Zod contracts
 
-All workflow inputs, outputs, suspend payloads, resume payloads, tool inputs,
-tool outputs, source records, assessments, plans, outreach drafts, monitoring
-events, and CRM write results are Zod schemas in
-`src/mastra/schemas/index.ts`.
+Workflow and tool boundaries are Zod-validated. Shared domain contracts such as
+source records, assessments, plans, outreach drafts, monitoring events, and CRM
+write results live in `src/mastra/schemas/index.ts`; the scheduled workflow,
+account workflow, and CRM tools also declare boundary-specific input and output
+schemas alongside their implementations.
 
 In model mode, `src/mastra/adapters/model/mastra-intelligence.ts` calls the
 Mastra agent with `structuredOutput` for three distinct artifacts:
@@ -115,12 +116,13 @@ Mastra working memory is configured through `Memory` in
 
 - It is always enabled in model mode.
 - Its scope is `resource`, where the resource key combines tenant and account.
-- The template records current verified risks, last approved actions, and open
-  CSM questions.
+- Its model-managed template offers advisory fields for current verified risks,
+  previously described actions, and open CSM questions.
 - The agent also receives the last ten messages for its scoped thread.
 
-This memory helps generation remain consistent across reviews. It is not the
-authoritative source for risk-score drift or approval state.
+This optional context can help generation remain consistent across reviews. It
+is not synchronized after the later approval step, so it is not the
+authoritative source for approved actions, risk-score drift, or approval state.
 
 ## Observational memory
 
@@ -223,13 +225,15 @@ same resume operation.
 The tools depend on `CrmRepository` and `CrmWriter`, not HubSpot types. Adopters
 can replace HubSpot with another CRM without changing the workflow contracts.
 
-Tool approval is defense in depth. The account workflow still requires its
-stronger, artifact-bound CSM approval before performing an operational write.
+Tool approval is defense in depth for callers that invoke the write tool
+directly. The account workflow uses its stronger, artifact-bound CSM gate and
+then calls `CrmWriter` directly; its write does not pass through a second Mastra
+tool-approval prompt.
 
 ## Scorers
 
-Five Mastra scorers are registered in `src/mastra/index.ts`, making them
-available to Mastra's evaluation tooling and Studio:
+Five Mastra scorers are registered in `src/mastra/index.ts` and exercised by the
+template's artifact-shaped fixture eval runner:
 
 - groundedness;
 - risk-factor extraction;
@@ -237,7 +241,8 @@ available to Mastra's evaluation tooling and Studio:
 - outreach personalization;
 - action relevance.
 
-Their exact behavior, fixture cases, and CI thresholds are documented in
+Their exact behavior, compatible input/output shapes, fixture cases, and CI
+thresholds are documented in
 [Evals](./evals.md).
 
 ## Observability

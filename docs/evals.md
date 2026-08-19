@@ -21,8 +21,10 @@ non-zero if any threshold fails.
 ## Scorer registration
 
 The scorer implementations live in `src/mastra/scorers/index.ts` and are
-registered on the `Mastra` instance in `src/mastra/index.ts`. Registration also
-makes them available to Mastra's trace and dataset evaluation surfaces.
+registered on the `Mastra` instance in `src/mastra/index.ts`. The included
+fixture runner invokes them with the template's artifact-shaped inputs and
+outputs. Dataset integrations can reuse them when they supply those same
+shapes; they are not adapters for Mastra's generic agent-message trace shape.
 
 The suite uses deterministic code-based scorers rather than model judges. This
 makes failures reproducible and keeps the default template free of eval model
