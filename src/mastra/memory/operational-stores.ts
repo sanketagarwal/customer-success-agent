@@ -292,11 +292,11 @@ export class LibSqlOperationalStore
     await this.initialized;
     const result = tenantId
       ? await this.client.execute({
-          sql: 'SELECT payload FROM cs_monitoring_events WHERE tenant_id = ? ORDER BY recorded_at, event_id',
+          sql: 'SELECT payload FROM cs_monitoring_events WHERE tenant_id = ? ORDER BY recorded_at, rowid',
           args: [tenantId],
         })
       : await this.client.execute(
-          'SELECT payload FROM cs_monitoring_events ORDER BY recorded_at, event_id',
+          'SELECT payload FROM cs_monitoring_events ORDER BY recorded_at, rowid',
         );
     return result.rows.map((row) => monitoringEventSchema.parse(JSON.parse(String(row.payload))));
   }

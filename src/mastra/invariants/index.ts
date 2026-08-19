@@ -31,7 +31,7 @@ export function canonicalJson(value: unknown): string {
   return `{${entries.join(',')}}`;
 }
 
-export function sha256(value: string): string {
+function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
@@ -86,10 +86,6 @@ function resolveEvidenceValue(
   return timestamp && !withinWindow(timestamp, ref)
     ? { resolved: false }
     : { resolved: true, value };
-}
-
-export function evidenceResolves(ref: EvidenceRef, sources: SourceSnapshot): boolean {
-  return resolveEvidenceValue(ref, sources).resolved;
 }
 
 export function evidenceMatchesSource(evidence: Evidence, sources: SourceSnapshot): boolean {

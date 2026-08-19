@@ -223,7 +223,8 @@ cannot lose the ambiguity guard. Response parsing and local intent-completion
 failures also preserve the pending claim after HubSpot may have committed. If
 HubSpot never exposes a marker after an ambiguous response, the intent
 deliberately remains pending for manual review rather than risking a duplicate
-customer record.
+customer record. Associated notes and tasks are read in HubSpot-sized batches,
+so accounts with more than 100 timeline records remain supported.
 
 ### Verifying an approved write in HubSpot
 
@@ -293,13 +294,17 @@ also runs the production dependency audit after validation.
 
 The project was scaffolded with `create-mastra` 1.25.0 and pins
 `@mastra/core` 1.59.0, `@mastra/libsql` 1.20.0, `@mastra/memory` 1.26.2, and
-`@mastra/observability` 1.17.0. API usage was checked against the documentation
-bundled with those packages and the official Mastra and HubSpot documentation.
+`@mastra/observability` 1.17.0. The deployer is held at 1.59.0 because 1.60.0
+logs a virtual-entrypoint path error during an otherwise successful build. API
+usage was checked against the documentation bundled with those packages and
+the official Mastra and HubSpot documentation.
 
 ## Pullfrog review gate
 
-The repository includes Pullfrog's official dispatch workflow. The repository
-owner must install the Pullfrog GitHub App, select this repository in the
-Pullfrog console, configure model access, and enable the PR-review automation.
-Project code must not be merged to `main` until both `CI / validate` and the
-configured Pullfrog review pass.
+`.github/workflows/pullfrog.yml` is Pullfrog's official manual dispatch
+workflow; it does not make Pullfrog run on every PR by itself. Automatic PR
+reviews require the Pullfrog GitHub App to be installed for this repository and
+PR-review automation to be enabled in Pullfrog. CI runs independently on every
+PR and every push to `main`. Project code should not be merged until
+`CI / validate` passes and, when the app is configured, Pullfrog has completed
+its review.

@@ -5,6 +5,7 @@ import { scopeKey } from '../src/mastra/invariants/index.js';
 import type { Clock, CrmRepository, CustomerSuccessIntelligence } from '../src/mastra/ports/index.js';
 import type { ApprovalDecision } from '../src/mastra/schemas/index.js';
 import {
+  canonicalizeAssessmentNarratives,
   checkAssessmentGrounding,
   checkOutreachGrounding,
   checkPlanGrounding,
@@ -29,6 +30,14 @@ describe('customer success service', () => {
         asOf: fixtureAsOf,
       });
       expect(result.outcome).toBe(outcome);
+      if (accountId === '340734348989') {
+        expect(result.plan?.actions.map((action) => action.title)).toEqual([
+          'Review product adoption signals and recovery steps',
+          'Resolve the verified support risk',
+          'Resolve the verified billing risk',
+          'Review the verified relationship signal',
+        ]);
+      }
     }
   });
 
@@ -81,6 +90,27 @@ describe('customer success service', () => {
     expect(checkOutreachGrounding(fabricatedOutreach, snapshot)).toMatchObject({
       grounded: false,
       unresolved: ['body'],
+    });
+
+    const unknownSnapshot = structuredClone(snapshot);
+    const relationshipRisk = prepared.assessment!.riskFactors.find(
+      (factor) => factor.category === 'relationship',
+    )!;
+    if (unknownSnapshot.crm.status !== 'available') throw new Error('CRM fixture is unavailable');
+    const matchingNote = unknownSnapshot.crm.data.notes.find(
+      (note) => note.recordId === relationshipRisk.evidence[0]!.ref.recordId,
+    )!;
+    matchingNote.sentiment = 'unknown';
+    const unknownOnlyRisk = canonicalizeAssessmentNarratives({
+      ...prepared.assessment!,
+      riskFactors: [{
+        ...relationshipRisk,
+        evidence: [{ ...relationshipRisk.evidence[0]!, value: 'unknown' }],
+      }],
+    });
+    expect(checkAssessmentGrounding(unknownOnlyRisk, unknownSnapshot)).toMatchObject({
+      grounded: false,
+      unresolved: ['riskFactors[0].evidence[0]'],
     });
   });
 

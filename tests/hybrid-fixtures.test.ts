@@ -3,11 +3,22 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { FixtureRepositories } from '../src/mastra/adapters/fixture/fixture-repositories.js';
-import { createComposition } from '../src/mastra/composition/create-composition.js';
+import {
+  createComposition,
+  libSqlConnectionOptions,
+} from '../src/mastra/composition/create-composition.js';
 import { loadConfig } from '../src/mastra/config.js';
 import { fixtureAsOf } from './helpers.js';
 
 describe('HubSpot and fixture hybrid mode', () => {
+  it('forwards remote database authentication to storage and semantic recall', () => {
+    expect(libSqlConnectionOptions('libsql://example.turso.io', 'secret')).toEqual({
+      url: 'libsql://example.turso.io',
+      authToken: 'secret',
+    });
+    expect(libSqlConnectionOptions(':memory:')).toEqual({ url: ':memory:' });
+  });
+
   it('maps the configured fixture tenant to the runtime tenant without changing account scope', async () => {
     const fixtures = new FixtureRepositories(resolve('data/fixtures/accounts.json'), {
       sourceTenantId: 'demo-tenant',

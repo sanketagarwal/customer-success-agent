@@ -16,7 +16,7 @@ const accountMonitoringSummarySchema = z.object({
   averageLatencyMs: z.number().nonnegative(),
 });
 
-export const customerSuccessMonitoringReportSchema = z.object({
+const customerSuccessMonitoringReportSchema = z.object({
   tenantId: z.string(),
   generatedAt: z.string(),
   totals: z.object({

@@ -251,9 +251,7 @@ export const approvalRequestSchema = z.object({
 
 export const runOutcomeSchema = z.enum([
   'no_action',
-  'action_required',
   'awaiting_approval',
-  'approved',
   'rejected',
   'written',
   'insufficient_data',

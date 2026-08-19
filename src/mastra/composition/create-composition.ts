@@ -34,6 +34,10 @@ export interface Composition {
   operationalStore: LibSqlOperationalStore;
 }
 
+export function libSqlConnectionOptions(url: string, authToken?: string) {
+  return { url, ...(authToken ? { authToken } : {}) };
+}
+
 export function createComposition(config: AppConfig): Composition {
   // Usage, support, and billing remain fixture-backed in both v1 modes, so the
   // operational clock stays pinned until those ports use live providers.
@@ -45,12 +49,14 @@ export function createComposition(config: AppConfig): Composition {
   const operationalStore = new LibSqlOperationalStore(config.databaseUrl, config.tursoAuthToken);
   const storage = new LibSQLStore({
     id: 'customer-success-storage',
-    url: config.databaseUrl,
-    ...(config.tursoAuthToken ? { authToken: config.tursoAuthToken } : {}),
+    ...libSqlConnectionOptions(config.databaseUrl, config.tursoAuthToken),
   });
 
   const vector = config.semanticRecall
-    ? new LibSQLVector({ id: 'customer-success-vector', url: config.databaseUrl })
+    ? new LibSQLVector({
+        id: 'customer-success-vector',
+        ...libSqlConnectionOptions(config.databaseUrl, config.tursoAuthToken),
+      })
     : undefined;
   const embedder = config.semanticRecall
     ? new ModelRouterEmbeddingModel(config.embeddingModel)
