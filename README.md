@@ -51,6 +51,17 @@ Expected demo outcomes:
 | `340737895140` | `insufficient_data` |
 | `340878324429` | `unknown_retry` |
 
+## Documentation
+
+- [Mastra primitives](./docs/mastra-primitives.md): workflows, scheduling,
+  structured output, memory, semantic recall, request context, approval, tools,
+  retries, scorers, and observability.
+- [Evals](./docs/evals.md): scorer behavior, positive and negative fixtures,
+  thresholds, CI integration, and extension guidance.
+- [Monitoring and observability](./docs/monitoring.md): event schema, durable
+  storage, risk drift, approvals, recommendations, costs, latency, feedback,
+  reports, traces, and redaction.
+
 The demo then runs the at-risk account through the actual suspend/resume
 workflow. A fixture CSM approves the bound artifacts, the fixture CRM creates
 one inspectable internal note and four follow-up tasks, and a replay returns the
