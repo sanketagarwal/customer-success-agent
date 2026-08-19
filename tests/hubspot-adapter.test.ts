@@ -106,7 +106,7 @@ describe('HubSpot adapter', () => {
         associationPages.push(after ?? 'first');
         return jsonResponse({
           results: (after ? associationIds.slice(100) : associationIds.slice(0, 100))
-            .map((toObjectId) => ({ toObjectId })),
+            .map((toObjectId) => ({ toObjectId: Number(toObjectId.slice(5)) })),
           ...(after ? {} : { paging: { next: { after: 'page-2' } } }),
         });
       }

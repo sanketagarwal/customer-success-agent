@@ -25,8 +25,8 @@ const pageSchema = z.object({
 });
 
 const associationPageSchema = z.object({
-  results: z.array(z.object({ toObjectId: z.string() })),
-  paging: z.object({ next: z.object({ after: z.string() }) }).optional(),
+  results: z.array(z.object({ toObjectId: z.coerce.string() })),
+  paging: z.object({ next: z.object({ after: z.coerce.string() }) }).optional(),
 });
 
 export interface HubSpotAdapterOptions {
