@@ -15,6 +15,14 @@ import { scopeKey } from '../../invariants/index.js';
 
 const generatedAssessmentSchema = healthAssessmentSchema.omit({ sourceSnapshotHash: true });
 
+const evidencePolicy = [
+  'Evidence policy:',
+  'cite only primitive values exactly as they appear in the normalized source records;',
+  'never cite support subject, CRM body, CRM authorId, or any field whose value is [REDACTED] or null;',
+  'use structured CRM sentiment rather than CRM body text;',
+  'omit a risk, action, or claim when no permitted evidence supports it.',
+].join(' ');
+
 export function modelSafeSnapshot(snapshot: SourceSnapshot): SourceSnapshot {
   const safe = structuredClone(snapshot);
   if (safe.support.status === 'available') {
@@ -34,11 +42,11 @@ export function modelSafeSnapshot(snapshot: SourceSnapshot): SourceSnapshot {
 }
 
 export function assessmentPrompt(snapshot: SourceSnapshot): string {
-  return `Create a structured health assessment from this normalized, redacted source snapshot.\n${JSON.stringify(modelSafeSnapshot(snapshot))}`;
+  return `Create a structured health assessment from this normalized, redacted source snapshot.\n${evidencePolicy}\n${JSON.stringify(modelSafeSnapshot(snapshot))}`;
 }
 
 function planPrompt(assessment: HealthAssessment, snapshot: SourceSnapshot): string {
-  return `Create an evidence-backed account plan.\nAssessment:\n${JSON.stringify(assessment)}\nRedacted sources:\n${JSON.stringify(modelSafeSnapshot(snapshot))}`;
+  return `Create an evidence-backed account plan.\n${evidencePolicy}\nAssessment:\n${JSON.stringify(assessment)}\nRedacted sources:\n${JSON.stringify(modelSafeSnapshot(snapshot))}`;
 }
 
 function outreachPrompt(
@@ -46,7 +54,7 @@ function outreachPrompt(
   plan: AccountPlan,
   snapshot: SourceSnapshot,
 ): string {
-  return `Draft concise outreach for CSM review. It must remain draft-only.\nAssessment:\n${JSON.stringify(assessment)}\nPlan:\n${JSON.stringify(plan)}\nRedacted sources:\n${JSON.stringify(modelSafeSnapshot(snapshot))}`;
+  return `Draft concise outreach for CSM review. It must remain draft-only.\n${evidencePolicy}\nAssessment:\n${JSON.stringify(assessment)}\nPlan:\n${JSON.stringify(plan)}\nRedacted sources:\n${JSON.stringify(modelSafeSnapshot(snapshot))}`;
 }
 
 export class MastraCustomerSuccessIntelligence implements CustomerSuccessIntelligence {

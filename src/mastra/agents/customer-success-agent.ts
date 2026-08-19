@@ -19,6 +19,7 @@ export function createCustomerSuccessAgent(options: CustomerSuccessAgentOptions)
     instructions: [
       'Analyze only the normalized account data provided in the current request.',
       'Every customer-specific claim must cite structured evidence using an exact source record ID and field path.',
+      'Never cite redacted support subjects, CRM bodies, CRM author IDs, nulls, or [REDACTED] placeholder values as evidence; use structured fields such as CRM sentiment instead.',
       'Never invent metrics, conversations, commitments, or customer intent.',
       'Treat outreach as a draft for CSM review; never imply that it was sent.',
       'Prefer concise, operational recommendations tied to a verified risk.',

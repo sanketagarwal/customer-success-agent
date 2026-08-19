@@ -78,6 +78,53 @@ the exact `artifactHash` and `artifactAsOf` shown in the suspend payload, plus
 the approver, decision time, and an expiry no later than the request expiry.
 Rejected, expired, changed, or mismatched artifacts never reach the CRM writer.
 
+### Approving a suspended run in Studio
+
+The **Traces** view is observability-only. To approve a run, open **Workflows**,
+select `customer-success-account`, choose the suspended run under **Recent
+runs**, and open `request-csm-approval`. The step's suspend payload contains the
+values the approval must be bound to:
+
+```json
+{
+  "artifactHash": "<64-character SHA-256 hash>",
+  "artifactAsOf": "<assessment timestamp>",
+  "requestedAt": "<approval-request timestamp>",
+  "expiresAt": "<maximum approval expiry>"
+}
+```
+
+Studio renders the resume schema as a form:
+
+| Studio field | Meaning | Value to provide |
+| --- | --- | --- |
+| `Decision` | Whether the CSM accepts the proposed artifacts | `approved` or `rejected` |
+| `Approver Id` | Identity of the CSM making the decision | The authenticated CSM ID; it must match RequestContext `csm-id` when supplied |
+| `Decided At` | When the decision was made | A trusted ISO timestamp |
+| `Expires At` | Last instant the decision is valid | An ISO timestamp no later than the suspend payload's `expiresAt` |
+| `Bound To Hash` | Fingerprint of the exact assessment, plan, and outreach reviewed | Copy `artifactHash` from the suspend payload |
+| `Bound To As Of` | Source-data snapshot time reviewed by the CSM | Copy `artifactAsOf` from the suspend payload |
+| `Feedback` | Optional CSM rationale or requested changes | Free text; monitoring records its presence, not its contents |
+
+The fixture clock is deliberately pinned. For a fixture Studio run, use the
+suspend payload's `requestedAt` as `Decided At`, its `expiresAt` as `Expires
+At`, and its `artifactAsOf` as `Bound To As Of`. Date pickers may display those
+same instants in the browser's local timezone.
+
+`artifactHash` is generated automatically before suspension. The template
+canonicalizes the structured assessment, account plan, and outreach draft,
+adds a contract version, and calculates a SHA-256 hash. The assessment includes
+the source snapshot hash, so the approval is indirectly bound to the verified
+source data as well. If any bound artifact changes, the hash changes and the
+old decision returns `stale_approval`. Immediately before writing, the workflow
+also re-reads the sources and rejects the approval if the data has changed.
+
+The CSM should not find or type hashes in a production interface. A host
+application or CRM approval adapter receives the suspend payload, stores the
+hash and timestamps as hidden fields, displays the human-readable assessment,
+plan, and outreach, and sends the hidden values back to Mastra's resume API.
+The CSM normally sees only **Approve**, **Reject**, and optional feedback.
+
 The CSM approves in **Mastra Studio or the application calling Mastra's resume
 API**, not in the CRM. When the host application knows the authenticated CSM,
 put that identity in RequestContext as `csm-id`; the workflow rejects a payload
@@ -177,6 +224,27 @@ failures also preserve the pending claim after HubSpot may have committed. If
 HubSpot never exposes a marker after an ambiguous response, the intent
 deliberately remains pending for manual review rather than risking a duplicate
 customer record.
+
+### Verifying an approved write in HubSpot
+
+Fixture-mode approvals write only to the in-memory mock CRM and never appear in
+HubSpot. After an explicitly configured `DATA_SOURCE=hubspot` run is approved,
+open **CRM → Companies**, select the company whose ID matches the workflow
+`accountId`, and inspect its activity timeline. Filter the timeline to **Notes**
+and **Tasks** if needed.
+
+The associated note is headed **Customer Success review draft — internal
+only** and contains the health status and score, grounded summary, account-plan
+actions, and outreach marked **not sent**. Each approved plan action also
+appears as an associated `NOT_STARTED` task with its owner-independent subject,
+rationale, due date, and priority. The same tasks can be viewed from HubSpot's
+task workspace and filtered by the associated company. No marketing or sales
+email appears because this template deliberately never invokes an email API.
+
+For a report, capture the Mastra suspended approval, the completed workflow
+output containing its `writeId`, the HubSpot company note, and the associated
+task list. The approval itself remains in Mastra unless an adopter implements a
+CRM-native approval button or webhook that calls Mastra's resume API.
 
 Set `HUBSPOT_RENEWAL_PROPERTY` to the internal name of your HubSpot company
 renewal-date property. Create that property in HubSpot first if the portal does

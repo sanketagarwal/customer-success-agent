@@ -49,6 +49,8 @@ describe('observability redaction', () => {
     expect(prompt).not.toContain(noteBody);
     expect(prompt).toContain('"subject":"[REDACTED]"');
     expect(prompt).toContain('"body":"[REDACTED]"');
+    expect(prompt).toContain('never cite support subject, CRM body, CRM authorId');
+    expect(prompt).toContain('use structured CRM sentiment rather than CRM body text');
 
     const filter = new SensitiveDataFilter({ sensitiveFields: ['body', 'subject', 'notes'] });
     const processed = filter.process({
