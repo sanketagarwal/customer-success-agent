@@ -68,6 +68,7 @@ The application depends only on these interfaces:
 - `AccountMemoryStore`
 - `ApprovalStore`
 - `CrmWriteIntentStore`
+- `MonitoringStore`
 - `Clock`
 - `CustomerSuccessIntelligence`
 
@@ -97,6 +98,12 @@ dependencies from the composition root and never inspect `process.env`.
   failures after a possible commit preserve the pending intent; the POST is
   never blindly replayed.
 - One account failure cannot terminate the scheduled batch.
+- Retryable account reads are retried by the Mastra step before the terminal
+  `unknown_retry` outcome is returned.
+- Monitoring events record scores, drift, decisions, accepted recommendations,
+  feedback presence, token/cost usage, and latency without copying feedback text.
+- When `csm-id` is supplied by trusted middleware in RequestContext, it must
+  match the approval payload's `approverId`.
 
 ## 5. Data handling
 

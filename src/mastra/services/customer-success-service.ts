@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type {
   AccountMemoryStore,
   ApprovalStore,
@@ -7,6 +9,7 @@ import type {
   CrmWriteResult,
   CrmWriter,
   CustomerSuccessIntelligence,
+  MonitoringStore,
   SupportRepository,
   UsageRepository,
 } from '../ports/index.js';
@@ -45,6 +48,7 @@ export interface CustomerSuccessDependencies {
   memory: AccountMemoryStore;
   approvals: ApprovalStore;
   intelligence: CustomerSuccessIntelligence;
+  monitoring: MonitoringStore;
   clock: Clock;
 }
 
@@ -97,6 +101,36 @@ export class CustomerSuccessService {
   }
 
   async prepare(input: PrepareRunInput): Promise<PreparedRun> {
+    const startedAt = performance.now();
+    const result = await this.prepareInternal(input);
+    const usage = this.dependencies.intelligence.takeUsage?.(input.tenantId, input.accountId) ?? {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      costUsd: 0,
+    };
+    await this.dependencies.monitoring.recordMonitoringEvent({
+      eventId: `${input.runId}:assessment:${randomUUID()}`,
+      runId: input.runId,
+      tenantId: input.tenantId,
+      accountId: input.accountId,
+      phase: 'assessment',
+      outcome: result.outcome,
+      riskScore: result.assessment?.score ?? null,
+      scoreDelta: result.drift?.scoreDelta ?? null,
+      recommendationCount: result.plan?.actions.length ?? 0,
+      acceptedRecommendationCount: 0,
+      approvalDecision: null,
+      outreachApproved: false,
+      hasHumanFeedback: false,
+      ...usage,
+      latencyMs: performance.now() - startedAt,
+      recordedAt: this.dependencies.clock.now().toISOString(),
+    });
+    return result;
+  }
+
+  private async prepareInternal(input: PrepareRunInput): Promise<PreparedRun> {
     const asOf = input.asOf ?? this.dependencies.clock.now().toISOString();
     const snapshot = await this.collect(input.tenantId, input.accountId, assessmentWindow(asOf));
     const results = [snapshot.usage, snapshot.support, snapshot.billing, snapshot.crm];
@@ -238,7 +272,38 @@ export class CustomerSuccessService {
   }
 
   async finalize(prepared: PreparedRun, rawDecision: ApprovalDecision): Promise<FinalizedRun> {
+    const startedAt = performance.now();
     const decision = approvalDecisionSchema.parse(rawDecision);
+    const result = await this.finalizeInternal(prepared, decision);
+    await this.dependencies.monitoring.recordMonitoringEvent({
+      eventId: `${prepared.runId}:approval:${randomUUID()}`,
+      runId: prepared.runId,
+      tenantId: prepared.tenantId,
+      accountId: prepared.accountId,
+      phase: 'approval',
+      outcome: result.run.outcome,
+      riskScore: prepared.assessment?.score ?? null,
+      scoreDelta: prepared.drift?.scoreDelta ?? null,
+      recommendationCount: prepared.plan?.actions.length ?? 0,
+      acceptedRecommendationCount:
+        result.run.outcome === 'written' ? prepared.plan?.actions.length ?? 0 : 0,
+      approvalDecision: decision.decision,
+      outreachApproved: result.run.outcome === 'written',
+      hasHumanFeedback: Boolean(decision.feedback?.trim()),
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      costUsd: 0,
+      latencyMs: performance.now() - startedAt,
+      recordedAt: this.dependencies.clock.now().toISOString(),
+    });
+    return result;
+  }
+
+  private async finalizeInternal(
+    prepared: PreparedRun,
+    decision: ApprovalDecision,
+  ): Promise<FinalizedRun> {
     const request = await this.dependencies.approvals.getRequest(prepared.runId);
     if (!request || !prepared.assessment || !prepared.plan || !prepared.outreach || !prepared.artifactHash) {
       return { run: { ...prepared, outcome: 'failed', message: 'Approval artifacts are incomplete.' }, write: null };

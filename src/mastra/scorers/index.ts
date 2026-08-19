@@ -43,19 +43,59 @@ export const riskFactorExtractionScorer = createScorer<
 
 export const accountPlanQualityScorer = createScorer<HealthAssessment, AccountPlan>({
   id: 'account-plan-quality',
-  description: 'Checks that a plan has actionable, assigned, dated, evidence-backed actions.',
+  description: 'Checks risk coverage, ownership, due dates, and evidence-backed action quality.',
 }).generateScore(({ run }) => {
   if (run.output.actions.length === 0) return 0;
-  const valid = run.output.actions.filter(
-    (action) => action.title.length > 0 && action.rationale.length > 0 && action.evidence.length > 0,
+  const factorRefs = run.input!.riskFactors.map(
+    (factor) => new Set(factor.evidence.map((item) => JSON.stringify(item.ref))),
+  );
+  const coveredFactors = factorRefs.filter((refs) =>
+    run.output.actions.some((action) =>
+      action.evidence.some((item) => refs.has(JSON.stringify(item.ref))),
+    ),
   ).length;
-  return valid / run.output.actions.length;
+  const factorCoverage =
+    factorRefs.length === 0 ? 0 : coveredFactors / factorRefs.length;
+  const validActions = run.output.actions.filter((action) => {
+    const matchingFactor = run.input!.riskFactors.find((factor) =>
+      action.evidence.some((item) =>
+        factor.evidence.some((factorEvidence) =>
+          JSON.stringify(factorEvidence.ref) === JSON.stringify(item.ref),
+        ),
+      ),
+    );
+    const expectedOwner =
+      matchingFactor?.category === 'billing'
+        ? 'billing'
+        : matchingFactor?.category === 'support'
+          ? 'support'
+          : 'csm';
+    return (
+      action.title.trim().length >= 12 &&
+      action.rationale.trim().length >= 8 &&
+      action.evidence.length > 0 &&
+      Date.parse(action.dueAt) >= Date.parse(run.input!.asOf) &&
+      action.owner === expectedOwner
+    );
+  }).length;
+  return (factorCoverage + validActions / run.output.actions.length) / 2;
 });
 
 export const personalizationScorer = createScorer<HealthAssessment, OutreachDraft>({
   id: 'outreach-personalization',
-  description: 'Checks that outreach contains evidence-backed account-specific claims.',
-}).generateScore(({ run }) => (run.output.claims.length > 0 && run.output.body.length >= 40 ? 1 : 0));
+  description: 'Checks that outreach explicitly incorporates every account risk through grounded claims.',
+}).generateScore(({ run }) => {
+  if (run.output.claims.length === 0 || run.output.body.length < 40 || !run.output.draftOnly) return 0;
+  const claimRefs = new Set(
+    run.output.claims.flatMap((claim) => claim.evidence.map((item) => JSON.stringify(item.ref))),
+  );
+  const riskRefs = run.input!.riskFactors.flatMap((factor) =>
+    factor.evidence.map((item) => JSON.stringify(item.ref)),
+  );
+  const risksCovered = riskRefs.length > 0 && riskRefs.every((ref) => claimRefs.has(ref));
+  const claimsUsed = run.output.claims.every((claim) => run.output.body.includes(claim.text));
+  return risksCovered && claimsUsed ? 1 : 0;
+});
 
 export const actionRelevanceScorer = createScorer<HealthAssessment, AccountPlan>({
   id: 'action-relevance',

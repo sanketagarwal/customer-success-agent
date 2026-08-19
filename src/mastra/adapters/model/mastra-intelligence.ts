@@ -7,6 +7,7 @@ import {
   outreachDraftSchema,
   sourceSnapshotSchema,
   type AccountPlan,
+  type GenerationUsage,
   type HealthAssessment,
   type SourceSnapshot,
 } from '../../schemas/index.js';
@@ -49,7 +50,59 @@ function outreachPrompt(
 }
 
 export class MastraCustomerSuccessIntelligence implements CustomerSuccessIntelligence {
-  constructor(private readonly agent: Agent) {}
+  private readonly usage = new Map<string, GenerationUsage>();
+
+  constructor(
+    private readonly agent: Agent,
+    private readonly pricing: { inputCostPerMillion: number; outputCostPerMillion: number } = {
+      inputCostPerMillion: 0,
+      outputCostPerMillion: 0,
+    },
+  ) {}
+
+  private key(tenantId: string, accountId: string): string {
+    return `${tenantId}\u0000${accountId}`;
+  }
+
+  private async captureUsage(
+    response: Awaited<ReturnType<Agent['generate']>>,
+    tenantId: string,
+    accountId: string,
+  ): Promise<void> {
+    const usage = await response.totalUsage;
+    const inputTokens = usage.inputTokens ?? 0;
+    const outputTokens = usage.outputTokens ?? 0;
+    const totalTokens = usage.totalTokens ?? inputTokens + outputTokens;
+    const costUsd =
+      (inputTokens * this.pricing.inputCostPerMillion +
+        outputTokens * this.pricing.outputCostPerMillion) /
+      1_000_000;
+    const key = this.key(tenantId, accountId);
+    const previous = this.usage.get(key) ?? {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      costUsd: 0,
+    };
+    this.usage.set(key, {
+      inputTokens: previous.inputTokens + inputTokens,
+      outputTokens: previous.outputTokens + outputTokens,
+      totalTokens: previous.totalTokens + totalTokens,
+      costUsd: previous.costUsd + costUsd,
+    });
+  }
+
+  takeUsage(tenantId: string, accountId: string): GenerationUsage {
+    const key = this.key(tenantId, accountId);
+    const usage = this.usage.get(key) ?? {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      costUsd: 0,
+    };
+    this.usage.delete(key);
+    return usage;
+  }
 
   async assess(input: Parameters<CustomerSuccessIntelligence['assess']>[0]) {
     const response = await this.agent.generate(
@@ -62,7 +115,11 @@ export class MastraCustomerSuccessIntelligence implements CustomerSuccessIntelli
         structuredOutput: { schema: generatedAssessmentSchema, jsonPromptInjection: 'auto' },
       },
     );
-    return generatedAssessmentSchema.parse(response.object);
+    const [object] = await Promise.all([
+      response.object,
+      this.captureUsage(response, input.snapshot.tenantId, input.snapshot.accountId),
+    ]);
+    return generatedAssessmentSchema.parse(object);
   }
 
   async plan(input: PlanningInput) {
@@ -76,7 +133,11 @@ export class MastraCustomerSuccessIntelligence implements CustomerSuccessIntelli
         structuredOutput: { schema: accountPlanSchema, jsonPromptInjection: 'auto' },
       },
     );
-    return accountPlanSchema.parse(response.object);
+    const [object] = await Promise.all([
+      response.object,
+      this.captureUsage(response, input.assessment.tenantId, input.assessment.accountId),
+    ]);
+    return accountPlanSchema.parse(object);
   }
 
   async draftOutreach(input: PlanningInput & { plan: Awaited<ReturnType<CustomerSuccessIntelligence['plan']>> }) {
@@ -90,6 +151,10 @@ export class MastraCustomerSuccessIntelligence implements CustomerSuccessIntelli
         structuredOutput: { schema: outreachDraftSchema, jsonPromptInjection: 'auto' },
       },
     );
-    return outreachDraftSchema.parse(response.object);
+    const [object] = await Promise.all([
+      response.object,
+      this.captureUsage(response, input.assessment.tenantId, input.assessment.accountId),
+    ]);
+    return outreachDraftSchema.parse(object);
   }
 }

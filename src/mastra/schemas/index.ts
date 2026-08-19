@@ -196,6 +196,23 @@ export const outreachDraftSchema = z.object({
   draftOnly: z.literal(true),
 });
 
+export const crmWriteInputSchema = z.object({
+  tenantId: z.string().min(1),
+  accountId: z.string().min(1),
+  runId: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  assessment: healthAssessmentSchema,
+  plan: accountPlanSchema,
+  outreach: outreachDraftSchema,
+});
+
+export const crmWriteResultSchema = z.object({
+  writeId: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  created: z.boolean(),
+  writtenAt: isoTimestampSchema,
+});
+
 export const assessmentMemoryEntrySchema = z.object({
   assessment: healthAssessmentSchema,
   drift: driftSchema,
@@ -259,6 +276,35 @@ export const preparedRunSchema = z.object({
   message: z.string(),
 });
 
+export const generationUsageSchema = z.object({
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+  costUsd: z.number().nonnegative(),
+});
+
+export const monitoringEventSchema = z.object({
+  eventId: z.string().min(1),
+  runId: z.string().min(1),
+  tenantId: z.string().min(1),
+  accountId: z.string().min(1),
+  phase: z.enum(['assessment', 'approval']),
+  outcome: runOutcomeSchema,
+  riskScore: z.number().int().min(0).max(100).nullable(),
+  scoreDelta: z.number().nullable(),
+  recommendationCount: z.number().int().nonnegative(),
+  acceptedRecommendationCount: z.number().int().nonnegative(),
+  approvalDecision: z.enum(['approved', 'rejected']).nullable(),
+  outreachApproved: z.boolean(),
+  hasHumanFeedback: z.boolean(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+  costUsd: z.number().nonnegative(),
+  latencyMs: z.number().nonnegative(),
+  recordedAt: isoTimestampSchema,
+});
+
 export type TimeWindow = z.infer<typeof timeWindowSchema>;
 export type EvidenceSource = z.infer<typeof evidenceSourceSchema>;
 export type EvidenceRef = z.infer<typeof evidenceRefSchema>;
@@ -279,7 +325,11 @@ export type AccountMemory = z.infer<typeof accountMemorySchema>;
 export type Drift = z.infer<typeof driftSchema>;
 export type AccountPlan = z.infer<typeof accountPlanSchema>;
 export type OutreachDraft = z.infer<typeof outreachDraftSchema>;
+export type CrmWriteInput = z.infer<typeof crmWriteInputSchema>;
+export type CrmWriteResult = z.infer<typeof crmWriteResultSchema>;
 export type ApprovalDecision = z.infer<typeof approvalDecisionSchema>;
 export type ApprovalRequest = z.infer<typeof approvalRequestSchema>;
 export type RunOutcome = z.infer<typeof runOutcomeSchema>;
 export type PreparedRun = z.infer<typeof preparedRunSchema>;
+export type GenerationUsage = z.infer<typeof generationUsageSchema>;
+export type MonitoringEvent = z.infer<typeof monitoringEventSchema>;

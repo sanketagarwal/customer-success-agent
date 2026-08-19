@@ -172,7 +172,7 @@ describe('customer success service', () => {
   });
 
   it('writes once after a current approval and deduplicates a replay', async () => {
-    const { service } = createTestSystem();
+    const { service, writer } = createTestSystem();
     const prepared = await service.prepare({
       runId: 'approval-write',
       tenantId: 'demo-tenant',
@@ -192,6 +192,8 @@ describe('customer success service', () => {
     expect(first.run.outcome).toBe('written');
     expect(first.write?.created).toBe(true);
     expect(replay.write).toMatchObject({ created: false, writeId: first.write?.writeId });
+    expect(writer.snapshot().notes).toHaveLength(1);
+    expect(writer.snapshot().tasks).toHaveLength(prepared.plan!.actions.length);
   });
 
   it('never writes rejected or stale approvals', async () => {

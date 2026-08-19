@@ -6,7 +6,11 @@ import type {
   ApprovalRequest,
   BillingStatus,
   CrmNotes,
+  CrmWriteInput,
+  CrmWriteResult,
+  GenerationUsage,
   HealthAssessment,
+  MonitoringEvent,
   OutreachDraft,
   SourceReadResult,
   SourceSnapshot,
@@ -38,25 +42,13 @@ export interface CrmRepository {
   getCrmNotes(query: AccountQuery): Promise<SourceReadResult<CrmNotes>>;
 }
 
-export interface CrmWriteInput {
-  tenantId: string;
-  accountId: string;
-  runId: string;
-  idempotencyKey: string;
-  assessment: HealthAssessment;
-  plan: AccountPlan;
-  outreach: OutreachDraft;
-}
-
-export interface CrmWriteResult {
-  writeId: string;
-  idempotencyKey: string;
-  created: boolean;
-  writtenAt: string;
-}
-
 export interface CrmWriter {
   writeApprovedDraft(input: CrmWriteInput): Promise<CrmWriteResult>;
+}
+
+export interface MonitoringStore {
+  recordMonitoringEvent(event: MonitoringEvent): Promise<void>;
+  listMonitoringEvents(tenantId?: string): Promise<readonly MonitoringEvent[]>;
 }
 
 export interface AccountMemoryStore {
@@ -116,4 +108,7 @@ export interface CustomerSuccessIntelligence {
   assess(input: AssessmentInput): Promise<Omit<HealthAssessment, 'sourceSnapshotHash'>>;
   plan(input: PlanningInput): Promise<AccountPlan>;
   draftOutreach(input: PlanningInput & { plan: AccountPlan }): Promise<OutreachDraft>;
+  takeUsage?(tenantId: string, accountId: string): GenerationUsage;
 }
+
+export type { CrmWriteInput, CrmWriteResult, GenerationUsage, MonitoringEvent } from '../schemas/index.js';

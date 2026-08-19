@@ -28,6 +28,13 @@ const scheduledOutputSchema = z.object({
   results: z.array(accountBatchResultSchema),
 });
 
+type ScheduledWorkflowDependencies = Pick<Composition, 'crm'> & {
+  config: Pick<
+    Composition['config'],
+    'maxAccountConcurrency' | 'cron' | 'timezone' | 'tenantId'
+  >;
+};
+
 async function mapWithConcurrency<T, R>(
   values: readonly T[],
   concurrency: number,
@@ -47,60 +54,18 @@ async function mapWithConcurrency<T, R>(
 }
 
 export function createScheduledWorkflow(
-  composition: Composition,
+  composition: ScheduledWorkflowDependencies,
   accountWorkflow: ReturnType<typeof createAccountWorkflow>,
 ) {
   const fanOut = createStep({
     id: 'fan-out-account-reviews',
+    description:
+      'List tenant accounts and run isolated customer-success reviews with bounded concurrency.',
     inputSchema: scheduledInputSchema,
     outputSchema: scheduledOutputSchema,
-    execute: async ({ inputData }) => {
-      const accounts = await composition.crm.listAccounts(inputData.tenantId);
-      const results = await mapWithConcurrency(
-        accounts,
-        composition.config.maxAccountConcurrency,
-        async (account) => {
-          const runId = `scheduled-${account.accountId}-${randomUUID()}`;
-          try {
-            const run = await accountWorkflow.createRun({ runId });
-            const requestContext = new RequestContext();
-            requestContext.set('tenant-id', account.tenantId);
-            requestContext.set('account-id', account.accountId);
-            const result = await run.start({
-              inputData: {
-                runId,
-                tenantId: account.tenantId,
-                accountId: account.accountId,
-                ...(inputData.asOf ? { asOf: inputData.asOf } : {}),
-              },
-              requestContext,
-            });
-            const outcome =
-              result.status === 'success'
-                ? result.result.outcome
-                : result.status === 'suspended'
-                  ? 'awaiting_approval'
-                  : 'unknown_retry';
-            return { accountId: account.accountId, runId, status: result.status, outcome, error: null };
-          } catch (error) {
-            return {
-              accountId: account.accountId,
-              runId,
-              status: 'failed' as const,
-              outcome: 'unknown_retry',
-              error: error instanceof Error ? error.message : String(error),
-            };
-          }
-        },
-      );
-      return {
-        tenantId: inputData.tenantId,
-        total: results.length,
-        succeeded: results.filter((result) => result.status === 'success' || result.status === 'suspended').length,
-        retryable: results.filter((result) => result.outcome === 'unknown_retry').length,
-        results,
-      };
-    },
+    retries: 2,
+    execute: ({ inputData }) =>
+      executeScheduledAccountReviews(composition, accountWorkflow, inputData),
   });
 
   return createWorkflow({
@@ -116,4 +81,64 @@ export function createScheduledWorkflow(
   })
     .then(fanOut)
     .commit();
+}
+
+export async function executeScheduledAccountReviews(
+  composition: ScheduledWorkflowDependencies,
+  accountWorkflow: ReturnType<typeof createAccountWorkflow>,
+  inputData: z.infer<typeof scheduledInputSchema>,
+): Promise<z.infer<typeof scheduledOutputSchema>> {
+  const accounts = await composition.crm.listAccounts(inputData.tenantId);
+  const results = await mapWithConcurrency(
+    accounts,
+    composition.config.maxAccountConcurrency,
+    async (account) => {
+      const runId = `scheduled-${account.accountId}-${randomUUID()}`;
+      try {
+        const run = await accountWorkflow.createRun({ runId });
+        const requestContext = new RequestContext();
+        requestContext.set('tenant-id', account.tenantId);
+        requestContext.set('account-id', account.accountId);
+        const result = await run.start({
+          inputData: {
+            runId,
+            tenantId: account.tenantId,
+            accountId: account.accountId,
+            ...(inputData.asOf ? { asOf: inputData.asOf } : {}),
+          },
+          requestContext,
+        });
+        const outcome =
+          result.status === 'success'
+            ? result.result.outcome
+            : result.status === 'suspended'
+              ? 'awaiting_approval'
+              : 'unknown_retry';
+        return {
+          accountId: account.accountId,
+          runId,
+          status: result.status,
+          outcome,
+          error: null,
+        };
+      } catch (error) {
+        return {
+          accountId: account.accountId,
+          runId,
+          status: 'failed' as const,
+          outcome: 'unknown_retry',
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  );
+  return {
+    tenantId: inputData.tenantId,
+    total: results.length,
+    succeeded: results.filter(
+      (result) => result.status === 'success' || result.status === 'suspended',
+    ).length,
+    retryable: results.filter((result) => result.outcome === 'unknown_retry').length,
+    results,
+  };
 }

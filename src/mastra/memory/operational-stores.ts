@@ -7,25 +7,29 @@ import type {
   CrmWriteIntentStore,
   IdempotencyRecord,
   IdempotencyStore,
+  MonitoringStore,
 } from '../ports/index.js';
 import {
   accountMemorySchema,
   approvalDecisionSchema,
   approvalRequestSchema,
+  monitoringEventSchema,
   type AccountMemory,
   type ApprovalDecision,
   type ApprovalRequest,
+  type MonitoringEvent,
 } from '../schemas/index.js';
 import { scopeKey } from '../invariants/index.js';
 
 export class InMemoryOperationalStore
-  implements AccountMemoryStore, ApprovalStore, IdempotencyStore, CrmWriteIntentStore
+  implements AccountMemoryStore, ApprovalStore, IdempotencyStore, CrmWriteIntentStore, MonitoringStore
 {
   private readonly memories = new Map<string, AccountMemory>();
   private readonly requests = new Map<string, ApprovalRequest>();
   private readonly decisions = new Map<string, ApprovalDecision>();
   private readonly writes = new Map<string, IdempotencyRecord>();
   private readonly intents = new Map<string, CrmWriteIntent>();
+  private readonly monitoringEvents: MonitoringEvent[] = [];
 
   get(tenantId: string, accountId: string): Promise<AccountMemory | null>;
   get(key: string): Promise<IdempotencyRecord | null>;
@@ -80,10 +84,20 @@ export class InMemoryOperationalStore
   async releaseIntent(key: string): Promise<void> {
     if (this.intents.get(key)?.status === 'pending') this.intents.delete(key);
   }
+
+  async recordMonitoringEvent(event: MonitoringEvent): Promise<void> {
+    this.monitoringEvents.push(structuredClone(monitoringEventSchema.parse(event)));
+  }
+
+  async listMonitoringEvents(tenantId?: string): Promise<readonly MonitoringEvent[]> {
+    return this.monitoringEvents
+      .filter((event) => !tenantId || event.tenantId === tenantId)
+      .map((event) => structuredClone(event));
+  }
 }
 
 export class LibSqlOperationalStore
-  implements AccountMemoryStore, ApprovalStore, IdempotencyStore, CrmWriteIntentStore
+  implements AccountMemoryStore, ApprovalStore, IdempotencyStore, CrmWriteIntentStore, MonitoringStore
 {
   private readonly client: Client;
   private readonly initialized: Promise<void>;
@@ -119,6 +133,12 @@ export class LibSqlOperationalStore
           status TEXT NOT NULL CHECK (status IN ('pending', 'completed')),
           write_id TEXT,
           updated_at TEXT NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS cs_monitoring_events (
+          event_id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          recorded_at TEXT NOT NULL,
+          payload TEXT NOT NULL
         )`,
       ],
       'write',
@@ -256,6 +276,29 @@ export class LibSqlOperationalStore
       sql: "DELETE FROM cs_crm_write_intents WHERE key = ? AND status = 'pending'",
       args: [key],
     });
+  }
+
+  async recordMonitoringEvent(event: MonitoringEvent): Promise<void> {
+    await this.initialized;
+    const parsed = monitoringEventSchema.parse(event);
+    await this.client.execute({
+      sql: `INSERT OR REPLACE INTO cs_monitoring_events (event_id, tenant_id, recorded_at, payload)
+            VALUES (?, ?, ?, ?)`,
+      args: [parsed.eventId, parsed.tenantId, parsed.recordedAt, JSON.stringify(parsed)],
+    });
+  }
+
+  async listMonitoringEvents(tenantId?: string): Promise<readonly MonitoringEvent[]> {
+    await this.initialized;
+    const result = tenantId
+      ? await this.client.execute({
+          sql: 'SELECT payload FROM cs_monitoring_events WHERE tenant_id = ? ORDER BY recorded_at, event_id',
+          args: [tenantId],
+        })
+      : await this.client.execute(
+          'SELECT payload FROM cs_monitoring_events ORDER BY recorded_at, event_id',
+        );
+    return result.rows.map((row) => monitoringEventSchema.parse(JSON.parse(String(row.payload))));
   }
 
   close(): void {

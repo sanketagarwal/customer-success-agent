@@ -24,6 +24,7 @@ export function createTestSystem(overrides: Partial<CustomerSuccessDependencies>
     memory: store,
     approvals: store,
     intelligence: new DeterministicCustomerSuccessIntelligence(),
+    monitoring: store,
     clock,
     ...overrides,
   };

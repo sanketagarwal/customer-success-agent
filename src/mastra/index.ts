@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
+import type { ToolAction } from '@mastra/core/tools';
 import { MastraStorageExporter, Observability, SensitiveDataFilter } from '@mastra/observability';
 
 import { createComposition } from './composition/create-composition.js';
@@ -24,6 +25,10 @@ export const mastra = new Mastra({
   storage: composition.storage,
   agents: { customerSuccessAgent: composition.agent },
   workflows: { customerSuccessAccountWorkflow, weeklyCustomerSuccessWorkflow },
+  // createTool instances are valid ToolActions at runtime; this cast works around
+  // the optional execute property exposed by the current @mastra/core declaration
+  // under TypeScript's exactOptionalPropertyTypes mode.
+  tools: composition.crmTools as unknown as Record<string, ToolAction<any, any>>,
   scorers: {
     groundednessScorer,
     riskFactorExtractionScorer,

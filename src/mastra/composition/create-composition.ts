@@ -20,6 +20,7 @@ import type {
   UsageRepository,
 } from '../ports/index.js';
 import { CustomerSuccessService } from '../services/customer-success-service.js';
+import { createCrmTools, type CustomerSuccessCrmTools } from '../tools/crm-tools.js';
 
 export interface Composition {
   config: AppConfig;
@@ -27,6 +28,8 @@ export interface Composition {
   agent: ReturnType<typeof createCustomerSuccessAgent>;
   service: CustomerSuccessService;
   crm: CrmRepository;
+  crmWriter: CrmWriter;
+  crmTools: CustomerSuccessCrmTools;
   clock: Clock;
   operationalStore: LibSqlOperationalStore;
 }
@@ -80,7 +83,10 @@ export function createComposition(config: AppConfig): Composition {
 
   const intelligence: CustomerSuccessIntelligence =
     config.generationMode === 'model'
-      ? new MastraCustomerSuccessIntelligence(agent)
+      ? new MastraCustomerSuccessIntelligence(agent, {
+          inputCostPerMillion: config.modelInputCostPerMillion,
+          outputCostPerMillion: config.modelOutputCostPerMillion,
+        })
       : new DeterministicCustomerSuccessIntelligence();
 
   const usage: UsageRepository = fixture;
@@ -95,8 +101,10 @@ export function createComposition(config: AppConfig): Composition {
     memory: operationalStore,
     approvals: operationalStore,
     intelligence,
+    monitoring: operationalStore,
     clock,
   });
+  const crmTools = createCrmTools(crm, crmWriter);
 
-  return { config, storage, agent, service, crm, clock, operationalStore };
+  return { config, storage, agent, service, crm, crmWriter, crmTools, clock, operationalStore };
 }

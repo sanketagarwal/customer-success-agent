@@ -15,6 +15,7 @@ export function createCustomerSuccessAgent(options: CustomerSuccessAgentOptions)
     id: 'customer-success-agent',
     name: 'Customer Success Renewal and Churn-Risk Agent',
     model: options.model,
+    maxRetries: 2,
     instructions: [
       'Analyze only the normalized account data provided in the current request.',
       'Every customer-specific claim must cite structured evidence using an exact source record ID and field path.',

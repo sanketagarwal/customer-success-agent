@@ -33,7 +33,7 @@ Requirements: Node.js 22.13 or newer.
 ```bash
 npm install
 cp .env.example .env
-npm run check
+npm run validate
 npm run demo
 npm run dev
 ```
@@ -51,6 +51,25 @@ Expected demo outcomes:
 | `340737895140` | `insufficient_data` |
 | `340878324429` | `unknown_retry` |
 
+The demo then runs the at-risk account through the actual suspend/resume
+workflow. A fixture CSM approves the bound artifacts, the fixture CRM creates
+one inspectable internal note and four follow-up tasks, and a replay returns the
+same write without duplication. A separate fixture run demonstrates rejection
+with no CRM write.
+
+## Mastra primitives
+
+- `weekly-customer-success` is a scheduled workflow with bounded account fan-out.
+- `customer-success-account` uses step retries, RequestContext identity, and a
+  persisted suspend/resume approval gate.
+- Model mode uses Zod-backed Mastra structured output, resource-scoped working
+  memory, and optional observational memory and semantic recall.
+- Connector-neutral Mastra tools expose account listing, CRM-note reads, and an
+  approval-required CRM draft write. The deterministic workflow remains the
+  authority for financial/customer-facing safety decisions.
+- Typed operational memory remains authoritative for risk-score drift even when
+  optional model memory is enabled.
+
 ## Approval flow
 
 Run `customer-success-account` in Studio with a unique run ID. At-risk accounts
@@ -58,6 +77,22 @@ suspend at `request-csm-approval`. Resume that step with a decision containing
 the exact `artifactHash` and `artifactAsOf` shown in the suspend payload, plus
 the approver, decision time, and an expiry no later than the request expiry.
 Rejected, expired, changed, or mismatched artifacts never reach the CRM writer.
+
+The CSM approves in **Mastra Studio or the application calling Mastra's resume
+API**, not in the CRM. When the host application knows the authenticated CSM,
+put that identity in RequestContext as `csm-id`; the workflow rejects a payload
+whose `approverId` does not match. A CRM-native approval experience is an
+optional adapter: create a CRM task/button or webhook that calls the same Mastra
+resume API. Approval semantics remain provider-neutral.
+
+The three registered CRM tools are:
+
+- `list-customer-accounts`
+- `read-customer-crm-notes`
+- `write-approved-customer-success-draft` (tool approval required)
+
+The account workflow still performs its stronger artifact-bound CSM approval
+before invoking a writer; tool approval is defense in depth for direct tool use.
 
 ## Model-backed generation and memory
 
@@ -77,10 +112,43 @@ semantic recall are opt-in because both incur model calls:
 ENABLE_OBSERVATIONAL_MEMORY=true
 ENABLE_SEMANTIC_RECALL=true
 EMBEDDING_MODEL=openai/text-embedding-3-small
+MODEL_INPUT_COST_PER_MILLION=0
+MODEL_OUTPUT_COST_PER_MILLION=0
 ```
 
 The authoritative operational history remains the typed `AccountMemoryStore`;
 model memory is contextual assistance, not the source of truth for drift.
+
+To exercise structured output, working memory, observational memory, semantic
+recall, and account-level token/cost capture together:
+
+```bash
+OPENAI_API_KEY=... npm run demo:model-memory
+```
+
+Set the two per-million pricing values for the selected model if non-zero cost
+reporting is desired. Deterministic fixture runs correctly report zero tokens
+and zero model cost.
+
+## Evals and monitoring
+
+`npm run evals` executes credential-free scorer gates against the fixture
+dataset. Supported outputs must score `1`; fabricated evidence, generic
+outreach, and irrelevant actions must score `0`. The gates cover risk-factor
+extraction, account-plan quality, unsupported claims, outreach personalization,
+and action relevance.
+
+`npm run monitoring:report` produces tenant and account summaries for:
+
+- latest risk score and score drift
+- recommendation and accepted-recommendation counts
+- approval decisions and outreach approvals
+- human-feedback counts (feedback text is not emitted)
+- token usage, configured model cost, average latency, and p95 latency
+
+Monitoring events are durable in LibSQL through `MonitoringStore`. Mastra's
+storage exporter continues to retain redacted execution spans for trace-level
+inspection.
 
 ## HubSpot
 
@@ -122,6 +190,11 @@ runtime tenant exposed to the workflow. Hybrid runs deliberately use
 `FIXTURE_NOW` as their clock so the bundled evidence does not age out; switch to
 a system clock when all source ports are backed by live providers.
 
+HubSpot is an example adapter, not a template requirement. Adopters can replace
+any combination of `UsageRepository`, `SupportRepository`, `BillingRepository`,
+`CrmRepository`, and `CrmWriter` without changing schemas, workflows, approval,
+evals, or monitoring.
+
 ## Architecture
 
 - `schemas/`: canonical Zod contracts
@@ -130,7 +203,9 @@ a system clock when all source ports are backed by live providers.
 - `adapters/model/`: Mastra structured-output intelligence
 - `adapters/hubspot/`: HubSpot CRM reader/writer
 - `memory/`: durable operational account, approval, idempotency, and CRM write-intent state
+- `monitoring/`: account/tenant metrics aggregation
 - `services/`: grounding, drift, and account orchestration
+- `tools/`: connector-neutral Mastra CRM tools
 - `workflows/`: account approval workflow and scheduled isolated fan-out
 - `scorers/`: groundedness, extraction, plan, personalization, and relevance
 
@@ -141,6 +216,10 @@ and drift → plan and outreach → approval and CRM write → scheduling and
 observability → HubSpot adapter. The groundedness tests deliberately fabricate
 references, values, assessment prose, plan rationales, and outreach claims;
 each must be rejected before the pipeline can proceed.
+
+`npm run validate` is the CI contract: typecheck → unit/integration tests → eval
+gates → complete fixture demo → monitoring assertions → production build. CI
+also runs the production dependency audit after validation.
 
 ## Verified API baseline
 

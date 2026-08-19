@@ -2,6 +2,8 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 import type { Composition } from '../composition/create-composition.js';
+import { ProviderUnavailableError } from '../errors/provider-unavailable-error.js';
+import type { ApprovalStore } from '../ports/index.js';
 import {
   approvalDecisionSchema,
   approvalRequestSchema,
@@ -25,37 +27,60 @@ export const accountRunOutputSchema = preparedRunSchema.extend({
   created: z.boolean().nullable(),
 });
 
-export function createAccountWorkflow(composition: Composition) {
+type AccountWorkflowDependencies = Pick<Composition, 'service'> & {
+  operationalStore: Pick<ApprovalStore, 'getRequest'>;
+};
+
+export function createAccountWorkflow(composition: AccountWorkflowDependencies) {
   const prepareAccount = createStep({
     id: 'prepare-account-review',
+    description: 'Collect account signals and prepare a grounded customer-success review.',
     inputSchema: accountRunInputSchema,
     outputSchema: preparedRunSchema,
-    execute: async ({ inputData, requestContext }) => {
+    retries: 2,
+    execute: async ({ inputData, requestContext, retryCount }) => {
       const contextTenant = requestContext.get('tenant-id');
       const contextAccount = requestContext.get('account-id');
-      if (contextTenant && contextTenant !== inputData.tenantId) throw new Error('tenant RequestContext mismatch');
-      if (contextAccount && contextAccount !== inputData.accountId) throw new Error('account RequestContext mismatch');
-      return composition.service.prepare({
+      if (contextTenant && contextTenant !== inputData.tenantId) {
+        throw new Error('tenant RequestContext mismatch');
+      }
+      if (contextAccount && contextAccount !== inputData.accountId) {
+        throw new Error('account RequestContext mismatch');
+      }
+      const prepared = await composition.service.prepare({
         runId: inputData.runId,
         tenantId: inputData.tenantId,
         accountId: inputData.accountId,
         ...(inputData.asOf ? { asOf: inputData.asOf } : {}),
       });
+      if (prepared.outcome === 'unknown_retry' && retryCount < 2) {
+        throw new ProviderUnavailableError(
+          'customer-success-sources',
+          `Retryable source failure on workflow attempt ${retryCount + 1}`,
+        );
+      }
+      return prepared;
     },
   });
 
   const requestApproval = createStep({
     id: 'request-csm-approval',
+    description:
+      'Suspend risky-account execution until a CSM approves or rejects the bound artifacts.',
     inputSchema: preparedRunSchema,
     outputSchema: approvalStepOutputSchema,
     resumeSchema: approvalDecisionSchema,
     suspendSchema: approvalRequestSchema,
-    execute: async ({ inputData, resumeData, suspend }) => {
+    execute: async ({ inputData, resumeData, suspend, requestContext }) => {
       if (inputData.outcome !== 'awaiting_approval') return { prepared: inputData, decision: null };
       if (!resumeData) {
         const request = await composition.operationalStore.getRequest(inputData.runId);
         if (!request) throw new Error(`Approval request ${inputData.runId} was not persisted`);
         return suspend(request);
+      }
+      const contextApprover = requestContext.get('csm-id');
+      if (contextApprover && contextApprover !== resumeData.approverId) {
+        throw new Error('approver RequestContext mismatch');
       }
       return { prepared: inputData, decision: resumeData };
     },
@@ -63,6 +88,8 @@ export function createAccountWorkflow(composition: Composition) {
 
   const writeApprovedDraft = createStep({
     id: 'write-approved-crm-draft',
+    description:
+      'Validate approval freshness and write the approved internal CRM draft exactly once.',
     inputSchema: approvalStepOutputSchema,
     outputSchema: accountRunOutputSchema,
     execute: async ({ inputData }) => {
