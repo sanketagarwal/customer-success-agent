@@ -149,6 +149,31 @@ describe('HubSpot adapter', () => {
     expect(batchSizes.sort((left, right) => right - left)).toEqual([100, 1]);
   });
 
+  it('rejects malformed association IDs before issuing a batch read', async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes('/objects/companies/') && url.includes('/associations/notes')) {
+        return jsonResponse({ results: [{ toObjectId: false }] });
+      }
+      throw new Error(`Unexpected HubSpot request: ${url}`);
+    });
+    const adapter = new HubSpotAdapter({
+      tenantId: 'tenant',
+      token: 'test-token',
+      baseUrl: 'https://api.hubapi.com',
+      clock: new FixedClock(new Date(fixtureAsOf)),
+      intents: new InMemoryOperationalStore(),
+      fetch: fetcher,
+    });
+
+    await expect(adapter.getCrmNotes({
+      tenantId: 'tenant',
+      accountId: '12345',
+      window: { start: '2026-08-01T00:00:00.000Z', end: fixtureAsOf },
+    })).resolves.toMatchObject({ status: 'unavailable' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it('writes internal notes and follow-up tasks without calling an email API', async () => {
     const prepared = await createTestSystem().service.prepare({
       runId: 'hubspot-write',

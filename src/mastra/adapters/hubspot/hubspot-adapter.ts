@@ -24,9 +24,13 @@ const pageSchema = z.object({
   paging: z.object({ next: z.object({ after: z.string() }) }).optional(),
 });
 
+const hubSpotIdSchema = z
+  .union([z.string().min(1), z.number().int().nonnegative()])
+  .transform(String);
+
 const associationPageSchema = z.object({
-  results: z.array(z.object({ toObjectId: z.coerce.string() })),
-  paging: z.object({ next: z.object({ after: z.coerce.string() }) }).optional(),
+  results: z.array(z.object({ toObjectId: hubSpotIdSchema })),
+  paging: z.object({ next: z.object({ after: hubSpotIdSchema }) }).optional(),
 });
 
 export interface HubSpotAdapterOptions {
