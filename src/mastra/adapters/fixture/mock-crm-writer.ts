@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import type {
   Clock,
+  CrmTaskWriteResult,
   CrmWriteInput,
   CrmWriteResult,
   CrmWriter,
@@ -55,15 +56,20 @@ export class MockCrmWriter implements CrmWriter {
     private readonly clock: Clock,
   ) {}
 
-  async writeApprovedDraft(input: CrmWriteInput): Promise<CrmWriteResult> {
-    const prior = await this.idempotency.get(input.idempotencyKey);
-    if (prior) return { ...prior, idempotencyKey: prior.key, created: false };
-
-    const writtenAt = this.clock.now().toISOString();
-    const writeId = stableId('fixture-note', input.idempotencyKey);
-    this.tasks.push(
-      ...input.plan.actions.map((action) => ({
-        taskId: stableId('fixture-task', `${input.idempotencyKey}:${action.id}`),
+  async writeApprovedTasks(input: CrmWriteInput): Promise<CrmTaskWriteResult> {
+    const completedAt = this.clock.now().toISOString();
+    const taskIds: string[] = [];
+    let createdCount = 0;
+    let existingCount = 0;
+    for (const action of input.plan.actions) {
+      const taskId = stableId('fixture-task', `${input.idempotencyKey}:${action.id}`);
+      taskIds.push(taskId);
+      if (this.tasks.some(task => task.taskId === taskId)) {
+        existingCount += 1;
+        continue;
+      }
+      this.tasks.push({
+        taskId,
         tenantId: input.tenantId,
         accountId: input.accountId,
         runId: input.runId,
@@ -74,8 +80,24 @@ export class MockCrmWriter implements CrmWriter {
         dueAt: action.dueAt,
         priority: action.priority,
         status: 'not_started' as const,
-      })),
-    );
+      });
+      createdCount += 1;
+    }
+    return {
+      taskIds,
+      idempotencyKey: input.idempotencyKey,
+      createdCount,
+      existingCount,
+      completedAt,
+    };
+  }
+
+  async writeApprovedNote(input: CrmWriteInput): Promise<CrmWriteResult> {
+    const prior = await this.idempotency.get(input.idempotencyKey);
+    if (prior) return { ...prior, idempotencyKey: prior.key, created: false };
+
+    const writtenAt = this.clock.now().toISOString();
+    const writeId = stableId('fixture-note', input.idempotencyKey);
     this.notes.push({
       noteId: writeId,
       tenantId: input.tenantId,
@@ -84,7 +106,7 @@ export class MockCrmWriter implements CrmWriter {
       healthStatus: input.assessment.status,
       healthScore: input.assessment.score,
       summary: input.assessment.summary,
-      planActionIds: input.plan.actions.map((action) => action.id),
+      planActionIds: input.plan.actions.map(action => action.id),
       outreachSubject: input.outreach.subject,
       outreachBody: input.outreach.body,
       draftOnly: true,
@@ -94,6 +116,11 @@ export class MockCrmWriter implements CrmWriter {
     const record = { key: input.idempotencyKey, writeId, writtenAt };
     await this.idempotency.save(record);
     return { ...record, idempotencyKey: record.key, created: true };
+  }
+
+  async writeApprovedDraft(input: CrmWriteInput): Promise<CrmWriteResult> {
+    await this.writeApprovedTasks(input);
+    return this.writeApprovedNote(input);
   }
 
   snapshot(): FixtureCrmSnapshot {

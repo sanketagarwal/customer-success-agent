@@ -33,10 +33,7 @@ export class InMemoryOperationalStore
 
   get(tenantId: string, accountId: string): Promise<AccountMemory | null>;
   get(key: string): Promise<IdempotencyRecord | null>;
-  async get(
-    tenantOrKey: string,
-    accountId?: string,
-  ): Promise<AccountMemory | IdempotencyRecord | null> {
+  async get(tenantOrKey: string, accountId?: string): Promise<AccountMemory | IdempotencyRecord | null> {
     if (accountId === undefined) return this.writes.get(tenantOrKey) ?? null;
     return this.memories.get(scopeKey(tenantOrKey, accountId)) ?? null;
   }
@@ -91,8 +88,8 @@ export class InMemoryOperationalStore
 
   async listMonitoringEvents(tenantId?: string): Promise<readonly MonitoringEvent[]> {
     return this.monitoringEvents
-      .filter((event) => !tenantId || event.tenantId === tenantId)
-      .map((event) => structuredClone(event));
+      .filter(event => !tenantId || event.tenantId === tenantId)
+      .map(event => structuredClone(event));
   }
 }
 
@@ -147,10 +144,7 @@ export class LibSqlOperationalStore
 
   get(tenantId: string, accountId: string): Promise<AccountMemory | null>;
   get(key: string): Promise<IdempotencyRecord | null>;
-  async get(
-    tenantOrKey: string,
-    accountId?: string,
-  ): Promise<AccountMemory | IdempotencyRecord | null> {
+  async get(tenantOrKey: string, accountId?: string): Promise<AccountMemory | IdempotencyRecord | null> {
     await this.initialized;
     if (accountId === undefined) {
       const result = await this.client.execute({
@@ -295,10 +289,8 @@ export class LibSqlOperationalStore
           sql: 'SELECT payload FROM cs_monitoring_events WHERE tenant_id = ? ORDER BY recorded_at, rowid',
           args: [tenantId],
         })
-      : await this.client.execute(
-          'SELECT payload FROM cs_monitoring_events ORDER BY recorded_at, rowid',
-        );
-    return result.rows.map((row) => monitoringEventSchema.parse(JSON.parse(String(row.payload))));
+      : await this.client.execute('SELECT payload FROM cs_monitoring_events ORDER BY recorded_at, rowid');
+    return result.rows.map(row => monitoringEventSchema.parse(JSON.parse(String(row.payload))));
   }
 
   close(): void {

@@ -11,12 +11,7 @@ export const timeWindowSchema = z
     message: 'window.start must be before or equal to window.end',
   });
 
-export const evidenceSourceSchema = z.enum([
-  'usage',
-  'support',
-  'billing',
-  'crm',
-]);
+export const evidenceSourceSchema = z.enum(['usage', 'support', 'billing', 'crm']);
 
 export const evidenceRefSchema = z.object({
   source: evidenceSourceSchema,
@@ -25,12 +20,7 @@ export const evidenceRefSchema = z.object({
   window: timeWindowSchema,
 });
 
-export const evidenceValueSchema = z.union([
-  z.string(),
-  z.number(),
-  z.boolean(),
-  z.null(),
-]);
+export const evidenceValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
 export const evidenceSchema = z.object({
   ref: evidenceRefSchema,
@@ -213,6 +203,14 @@ export const crmWriteResultSchema = z.object({
   writtenAt: isoTimestampSchema,
 });
 
+export const crmTaskWriteResultSchema = z.object({
+  taskIds: z.array(z.string().min(1)),
+  idempotencyKey: z.string().min(1),
+  createdCount: z.number().int().nonnegative(),
+  existingCount: z.number().int().nonnegative(),
+  completedAt: isoTimestampSchema,
+});
+
 export const assessmentMemoryEntrySchema = z.object({
   assessment: healthAssessmentSchema,
   drift: driftSchema,
@@ -270,7 +268,10 @@ export const preparedRunSchema = z.object({
   drift: driftSchema.nullable(),
   plan: accountPlanSchema.nullable(),
   outreach: outreachDraftSchema.nullable(),
-  artifactHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  artifactHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .nullable(),
   message: z.string(),
 });
 
@@ -325,6 +326,7 @@ export type AccountPlan = z.infer<typeof accountPlanSchema>;
 export type OutreachDraft = z.infer<typeof outreachDraftSchema>;
 export type CrmWriteInput = z.infer<typeof crmWriteInputSchema>;
 export type CrmWriteResult = z.infer<typeof crmWriteResultSchema>;
+export type CrmTaskWriteResult = z.infer<typeof crmTaskWriteResultSchema>;
 export type ApprovalDecision = z.infer<typeof approvalDecisionSchema>;
 export type ApprovalRequest = z.infer<typeof approvalRequestSchema>;
 export type RunOutcome = z.infer<typeof runOutcomeSchema>;

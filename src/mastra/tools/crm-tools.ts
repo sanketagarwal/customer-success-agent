@@ -32,7 +32,7 @@ export function createCrmTools(crm: CrmRepository, crmWriter: CrmWriter) {
       window: timeWindowSchema,
     }),
     outputSchema: sourceReadResultSchema(crmNotesSchema),
-    execute: (input) => crm.getCrmNotes(input),
+    execute: input => crm.getCrmNotes(input),
     mcp: {
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -45,7 +45,7 @@ export function createCrmTools(crm: CrmRepository, crmWriter: CrmWriter) {
     inputSchema: crmWriteInputSchema,
     outputSchema: crmWriteResultSchema,
     requireApproval: true,
-    execute: (input) => crmWriter.writeApprovedDraft(input),
+    execute: input => crmWriter.writeApprovedDraft(input),
     mcp: {
       annotations: { readOnlyHint: false, destructiveHint: false },
     },

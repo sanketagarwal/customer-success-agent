@@ -14,8 +14,8 @@ the executable form of these contracts.
 - A read returns one of three states: `available`, `empty`, or `unavailable`.
   `empty` means the provider answered successfully with no records.
   `unavailable` is retryable and maps to `unknown_retry`.
-- Time-dependent code receives a `Clock`; domain code never reads wall-clock
-  time directly.
+- Domain timestamps receive a `Clock`. Workflow wall-clock measurements are
+  used only for execution-latency metrics.
 
 ## 2. Canonical schemas
 
@@ -28,7 +28,9 @@ field path, time window, and exact primitive value resolve in the normalized
 source snapshot used for the run. Customer-specific prose is rendered from
 these verified facts; arbitrary generated prose cannot pass the deterministic
 grounding gate. Null, empty, `unknown`, and redacted values describe missing
-information and cannot support a risk, action, or outreach claim.
+information and cannot support a risk, action, or outreach claim. Evidence
+field allowlists also prevent support subjects, CRM bodies, and CRM author IDs
+from becoming generated evidence or narrative.
 
 The canonical schemas are:
 

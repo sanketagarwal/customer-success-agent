@@ -38,12 +38,7 @@ const positive = {
   }),
   atRiskRiskExtraction: await riskFactorExtractionScorer.run({
     input: {
-      expectedFactorIds: [
-        'declining-adoption',
-        'urgent-support-issue',
-        'billing-risk',
-        'negative-relationship-signal',
-      ],
+      expectedFactorIds: ['declining-adoption', 'urgent-support-issue', 'billing-risk', 'negative-relationship-signal'],
     },
     output: atRisk.assessment,
   }),
@@ -90,18 +85,12 @@ const negative = {
   }),
 };
 
-const positiveScores = Object.fromEntries(
-  Object.entries(positive).map(([name, result]) => [name, result.score]),
-);
-const negativeScores = Object.fromEntries(
-  Object.entries(negative).map(([name, result]) => [name, result.score]),
-);
+const positiveScores = Object.fromEntries(Object.entries(positive).map(([name, result]) => [name, result.score]));
+const negativeScores = Object.fromEntries(Object.entries(negative).map(([name, result]) => [name, result.score]));
 const failedPositive = Object.entries(positiveScores).filter(([, score]) => score < 1);
 const failedNegative = Object.entries(negativeScores).filter(([, score]) => score !== 0);
 
 console.log(JSON.stringify({ thresholds: { positive: 1, negative: 0 }, positiveScores, negativeScores }, null, 2));
 if (failedPositive.length > 0 || failedNegative.length > 0) {
-  throw new Error(
-    `Eval gates failed: ${JSON.stringify({ failedPositive, failedNegative })}`,
-  );
+  throw new Error(`Eval gates failed: ${JSON.stringify({ failedPositive, failedNegative })}`);
 }

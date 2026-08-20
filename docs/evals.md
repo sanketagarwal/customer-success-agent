@@ -74,7 +74,8 @@ score is 0. Production code would stop the same artifact with
 `grounding_failed` before approval or CRM writing.
 
 Additional unit tests cover fabricated record IDs, fabricated values,
-unsupported prose, redacted data, and `unknown`-only risk evidence.
+unsupported prose, redacted data, prohibited free-text evidence fields, and
+`unknown`-only risk evidence.
 
 ## Account-plan quality
 
@@ -130,10 +131,10 @@ The expected score is 0.
 
 The eval script uses strict fixture thresholds:
 
-| Group | Required score |
-| --- | --- |
-| Positive cases | `1` |
-| Negative cases | `0` |
+| Group          | Required score |
+| -------------- | -------------- |
+| Positive cases | `1`            |
+| Negative cases | `0`            |
 
 The positive group currently includes healthy extraction, at-risk extraction,
 groundedness, account-plan quality, personalization, and action relevance. The

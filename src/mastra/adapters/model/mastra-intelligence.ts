@@ -27,13 +27,13 @@ const evidencePolicy = [
 function modelSafeSnapshot(snapshot: SourceSnapshot): SourceSnapshot {
   const safe = structuredClone(snapshot);
   if (safe.support.status === 'available') {
-    safe.support.data.tickets = safe.support.data.tickets.map((ticket) => ({
+    safe.support.data.tickets = safe.support.data.tickets.map(ticket => ({
       ...ticket,
       subject: '[REDACTED]',
     }));
   }
   if (safe.crm.status === 'available') {
-    safe.crm.data.notes = safe.crm.data.notes.map((note) => ({
+    safe.crm.data.notes = safe.crm.data.notes.map(note => ({
       ...note,
       authorId: null,
       body: '[REDACTED]',
@@ -50,11 +50,7 @@ function planPrompt(assessment: HealthAssessment, snapshot: SourceSnapshot): str
   return `Create an evidence-backed account plan.\n${evidencePolicy}\nAssessment:\n${JSON.stringify(assessment)}\nRedacted sources:\n${JSON.stringify(modelSafeSnapshot(snapshot))}`;
 }
 
-function outreachPrompt(
-  assessment: HealthAssessment,
-  plan: AccountPlan,
-  snapshot: SourceSnapshot,
-): string {
+function outreachPrompt(assessment: HealthAssessment, plan: AccountPlan, snapshot: SourceSnapshot): string {
   return `Draft concise outreach for CSM review. It must remain draft-only.\n${evidencePolicy}\nAssessment:\n${JSON.stringify(assessment)}\nPlan:\n${JSON.stringify(plan)}\nRedacted sources:\n${JSON.stringify(modelSafeSnapshot(snapshot))}`;
 }
 
@@ -83,9 +79,7 @@ export class MastraCustomerSuccessIntelligence implements CustomerSuccessIntelli
     const outputTokens = usage.outputTokens ?? 0;
     const totalTokens = usage.totalTokens ?? inputTokens + outputTokens;
     const costUsd =
-      (inputTokens * this.pricing.inputCostPerMillion +
-        outputTokens * this.pricing.outputCostPerMillion) /
-      1_000_000;
+      (inputTokens * this.pricing.inputCostPerMillion + outputTokens * this.pricing.outputCostPerMillion) / 1_000_000;
     const key = this.key(tenantId, accountId);
     const previous = this.usage.get(key) ?? {
       inputTokens: 0,
@@ -114,16 +108,13 @@ export class MastraCustomerSuccessIntelligence implements CustomerSuccessIntelli
   }
 
   async assess(input: Parameters<CustomerSuccessIntelligence['assess']>[0]) {
-    const response = await this.agent.generate(
-      assessmentPrompt(input.snapshot),
-      {
-        memory: {
-          resource: scopeKey(input.snapshot.tenantId, input.snapshot.accountId),
-          thread: `assessment:${input.snapshot.accountId}:${input.asOf}`,
-        },
-        structuredOutput: { schema: generatedAssessmentSchema, jsonPromptInjection: 'auto' },
+    const response = await this.agent.generate(assessmentPrompt(input.snapshot), {
+      memory: {
+        resource: scopeKey(input.snapshot.tenantId, input.snapshot.accountId),
+        thread: `assessment:${input.snapshot.accountId}:${input.asOf}`,
       },
-    );
+      structuredOutput: { schema: generatedAssessmentSchema, jsonPromptInjection: 'auto' },
+    });
     const [object] = await Promise.all([
       response.object,
       this.captureUsage(response, input.snapshot.tenantId, input.snapshot.accountId),
@@ -132,16 +123,13 @@ export class MastraCustomerSuccessIntelligence implements CustomerSuccessIntelli
   }
 
   async plan(input: PlanningInput) {
-    const response = await this.agent.generate(
-      planPrompt(input.assessment, input.snapshot),
-      {
-        memory: {
-          resource: scopeKey(input.assessment.tenantId, input.assessment.accountId),
-          thread: `plan:${input.assessment.accountId}:${input.asOf}`,
-        },
-        structuredOutput: { schema: accountPlanSchema, jsonPromptInjection: 'auto' },
+    const response = await this.agent.generate(planPrompt(input.assessment, input.snapshot), {
+      memory: {
+        resource: scopeKey(input.assessment.tenantId, input.assessment.accountId),
+        thread: `plan:${input.assessment.accountId}:${input.asOf}`,
       },
-    );
+      structuredOutput: { schema: accountPlanSchema, jsonPromptInjection: 'auto' },
+    });
     const [object] = await Promise.all([
       response.object,
       this.captureUsage(response, input.assessment.tenantId, input.assessment.accountId),
@@ -150,16 +138,13 @@ export class MastraCustomerSuccessIntelligence implements CustomerSuccessIntelli
   }
 
   async draftOutreach(input: PlanningInput & { plan: Awaited<ReturnType<CustomerSuccessIntelligence['plan']>> }) {
-    const response = await this.agent.generate(
-      outreachPrompt(input.assessment, input.plan, input.snapshot),
-      {
-        memory: {
-          resource: scopeKey(input.assessment.tenantId, input.assessment.accountId),
-          thread: `outreach:${input.assessment.accountId}:${input.asOf}`,
-        },
-        structuredOutput: { schema: outreachDraftSchema, jsonPromptInjection: 'auto' },
+    const response = await this.agent.generate(outreachPrompt(input.assessment, input.plan, input.snapshot), {
+      memory: {
+        resource: scopeKey(input.assessment.tenantId, input.assessment.accountId),
+        thread: `outreach:${input.assessment.accountId}:${input.asOf}`,
       },
-    );
+      structuredOutput: { schema: outreachDraftSchema, jsonPromptInjection: 'auto' },
+    });
     const [object] = await Promise.all([
       response.object,
       this.captureUsage(response, input.assessment.tenantId, input.assessment.accountId),

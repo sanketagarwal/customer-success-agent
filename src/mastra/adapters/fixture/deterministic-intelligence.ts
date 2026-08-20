@@ -50,7 +50,7 @@ function deriveRiskFactors(snapshot: SourceSnapshot): RiskFactor[] {
 
   if (snapshot.support.status === 'available') {
     const urgent = snapshot.support.data.tickets.find(
-      (ticket) => ticket.priority === 'urgent' && ticket.status !== 'closed' && ticket.status !== 'resolved',
+      ticket => ticket.priority === 'urgent' && ticket.status !== 'closed' && ticket.status !== 'resolved',
     );
     if (urgent) {
       factors.push({
@@ -82,7 +82,7 @@ function deriveRiskFactors(snapshot: SourceSnapshot): RiskFactor[] {
   }
 
   if (snapshot.crm.status === 'available') {
-    const negative = snapshot.crm.data.notes.find((note) => note.sentiment === 'negative');
+    const negative = snapshot.crm.data.notes.find(note => note.sentiment === 'negative');
     if (negative) {
       factors.push({
         id: 'negative-relationship-signal',
@@ -101,16 +101,13 @@ function deriveRiskFactors(snapshot: SourceSnapshot): RiskFactor[] {
 
 function completeness(snapshot: SourceSnapshot): number {
   const results = [snapshot.usage, snapshot.support, snapshot.billing, snapshot.crm];
-  return results.filter((result) => result.status === 'available').length / results.length;
+  return results.filter(result => result.status === 'available').length / results.length;
 }
 
 export class DeterministicCustomerSuccessIntelligence implements CustomerSuccessIntelligence {
   async assess({ snapshot, asOf }: Parameters<CustomerSuccessIntelligence['assess']>[0]) {
     const riskFactors = deriveRiskFactors(snapshot);
-    const score = Math.max(
-      0,
-      100 - riskFactors.reduce((total, factor) => total + severityPenalty[factor.severity], 0),
-    );
+    const score = Math.max(0, 100 - riskFactors.reduce((total, factor) => total + severityPenalty[factor.severity], 0));
     const status: HealthAssessment['status'] =
       score >= 80 ? 'healthy' : score >= 60 ? 'watch' : score >= 35 ? 'at_risk' : 'critical';
     return {
@@ -148,7 +145,7 @@ export class DeterministicCustomerSuccessIntelligence implements CustomerSuccess
   }
 
   async draftOutreach({ assessment, plan, asOf }: PlanningInput & { plan: AccountPlan }): Promise<OutreachDraft> {
-    const claims = assessment.riskFactors.map((factor) => ({
+    const claims = assessment.riskFactors.map(factor => ({
       text: factor.title,
       evidence: factor.evidence,
     }));

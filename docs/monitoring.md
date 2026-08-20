@@ -16,24 +16,24 @@ or model providers change.
 contract. Every event includes correlation and timing fields plus the metrics
 needed for tenant and account reporting.
 
-| Field | Meaning |
-| --- | --- |
-| `eventId` | Unique event identifier |
-| `runId` | Mastra/account workflow run identifier |
-| `tenantId`, `accountId` | Reporting scope |
-| `phase` | `assessment` or `approval` |
-| `outcome` | Terminal domain outcome for that phase |
-| `riskScore` | Current health score, or null when no assessment exists |
-| `scoreDelta` | Change from the prior assessment |
-| `recommendationCount` | Number of proposed plan actions |
-| `acceptedRecommendationCount` | Actions counted as accepted after a successful write |
-| `approvalDecision` | Approved, rejected, or null |
-| `outreachApproved` | True only when the approved draft was written |
-| `hasHumanFeedback` | Whether feedback was supplied, without storing it in the event |
-| `inputTokens`, `outputTokens`, `totalTokens` | Account-level generation usage |
-| `costUsd` | Configured estimate for model generation |
-| `latencyMs` | Phase execution latency |
-| `recordedAt` | Operational clock timestamp |
+| Field                                        | Meaning                                                        |
+| -------------------------------------------- | -------------------------------------------------------------- |
+| `eventId`                                    | Unique event identifier                                        |
+| `runId`                                      | Mastra/account workflow run identifier                         |
+| `tenantId`, `accountId`                      | Reporting scope                                                |
+| `phase`                                      | `assessment` or `approval`                                     |
+| `outcome`                                    | Terminal domain outcome for that phase                         |
+| `riskScore`                                  | Current health score, or null when no assessment exists        |
+| `scoreDelta`                                 | Change from the prior assessment                               |
+| `recommendationCount`                        | Number of proposed plan actions                                |
+| `acceptedRecommendationCount`                | Actions counted as accepted after a successful write           |
+| `approvalDecision`                           | Approved, rejected, or null                                    |
+| `outreachApproved`                           | True only when the approved draft was written                  |
+| `hasHumanFeedback`                           | Whether feedback was supplied, without storing it in the event |
+| `inputTokens`, `outputTokens`, `totalTokens` | Account-level generation usage                                 |
+| `costUsd`                                    | Configured estimate for model generation                       |
+| `latencyMs`                                  | Phase execution latency                                        |
+| `recordedAt`                                 | Operational clock timestamp                                    |
 
 ## Event emission points
 
@@ -41,7 +41,8 @@ needed for tenant and account reporting.
 
 ### Assessment event
 
-`prepare()` measures the complete preparation phase and records:
+The Studio workflow's `record-assessment-monitoring` step and the direct
+`prepare()` service API each record:
 
 - outcome, including `no_action`, `awaiting_approval`, `insufficient_data`,
   `unknown_retry`, or `grounding_failed`;
@@ -50,13 +51,14 @@ needed for tenant and account reporting.
 - model token usage and configured cost;
 - preparation latency.
 
-Retries produce separate assessment events because each call to `prepare()` is
-an observable attempt. This makes provider instability visible rather than
-hiding it inside the final result.
+A completed preparation emits one business event. Step-level retry attempts are
+visible in Mastra traces; if a source remains unavailable after its retry
+budget, the final assessment event records `unknown_retry`.
 
 ### Approval event
 
-`finalize()` records:
+The Studio workflow's `record-approval-monitoring` step and the direct
+`finalize()` service API record:
 
 - the CSM decision;
 - whether the outreach draft reached CRM;
@@ -147,18 +149,18 @@ fixture clock is pinned.
 The stored fields support the requested operational indicators without parsing
 traces:
 
-| Indicator | Calculation |
-| --- | --- |
-| Risk-score drift | Latest assessment `riskScore` and `scoreDelta` by account |
-| Accepted recommendations | Sum of `acceptedRecommendationCount` |
-| Outreach approvals | Count where `outreachApproved` is true |
-| Approval rate | Approved decisions divided by all decisions |
-| Rejection rate | Rejected decisions divided by all decisions |
-| Human-feedback participation | Count or rate where `hasHumanFeedback` is true |
-| Account cost | Sum `costUsd` by tenant/account |
-| Latency | Average and p95 `latencyMs` |
-| Retry pressure | Assessment attempts ending in `unknown_retry` |
-| Grounding failures | Assessment attempts ending in `grounding_failed` |
+| Indicator                    | Calculation                                               |
+| ---------------------------- | --------------------------------------------------------- |
+| Risk-score drift             | Latest assessment `riskScore` and `scoreDelta` by account |
+| Accepted recommendations     | Sum of `acceptedRecommendationCount`                      |
+| Outreach approvals           | Count where `outreachApproved` is true                    |
+| Approval rate                | Approved decisions divided by all decisions               |
+| Rejection rate               | Rejected decisions divided by all decisions               |
+| Human-feedback participation | Count or rate where `hasHumanFeedback` is true            |
+| Account cost                 | Sum `costUsd` by tenant/account                           |
+| Latency                      | Average and p95 `latencyMs`                               |
+| Retry pressure               | Assessment attempts ending in `unknown_retry`             |
+| Grounding failures           | Assessment attempts ending in `grounding_failed`          |
 
 For production dashboards, export or query `MonitoringStore` events from the
 organization's metrics stack. Keep the domain event schema stable and version

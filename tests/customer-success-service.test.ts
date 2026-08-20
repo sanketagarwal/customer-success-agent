@@ -31,12 +31,14 @@ describe('customer success service', () => {
       });
       expect(result.outcome).toBe(outcome);
       if (accountId === '340734348989') {
-        expect(result.plan?.actions.map((action) => action.title)).toEqual([
+        expect(result.plan?.actions.map(action => action.title)).toEqual([
           'Review product adoption signals and recovery steps',
           'Resolve the verified support risk',
           'Resolve the verified billing risk',
           'Review the verified relationship signal',
         ]);
+        expect(result.outreach?.body).toContain('Product adoption readings during the review window are 72% and 31%');
+        expect(result.outreach?.body).not.toContain('usage.adoptionRate');
       }
     }
   });
@@ -65,10 +67,7 @@ describe('customer success service', () => {
     fabricatedValue.riskFactors[0]!.evidence[0]!.value = 'fabricated-value';
     expect(checkAssessmentGrounding(fabricatedValue, snapshot)).toMatchObject({
       grounded: false,
-      unresolved: expect.arrayContaining([
-        'riskFactors[0].evidence[0]',
-        'riskFactors[0].explanation',
-      ]),
+      unresolved: expect.arrayContaining(['riskFactors[0].evidence[0]', 'riskFactors[0].explanation']),
     });
 
     const fabricatedSummary = structuredClone(prepared.assessment!);
@@ -93,25 +92,83 @@ describe('customer success service', () => {
     });
 
     const unknownSnapshot = structuredClone(snapshot);
-    const relationshipRisk = prepared.assessment!.riskFactors.find(
-      (factor) => factor.category === 'relationship',
-    )!;
+    const relationshipRisk = prepared.assessment!.riskFactors.find(factor => factor.category === 'relationship')!;
     if (unknownSnapshot.crm.status !== 'available') throw new Error('CRM fixture is unavailable');
     const matchingNote = unknownSnapshot.crm.data.notes.find(
-      (note) => note.recordId === relationshipRisk.evidence[0]!.ref.recordId,
+      note => note.recordId === relationshipRisk.evidence[0]!.ref.recordId,
     )!;
     matchingNote.sentiment = 'unknown';
     const unknownOnlyRisk = canonicalizeAssessmentNarratives({
       ...prepared.assessment!,
-      riskFactors: [{
-        ...relationshipRisk,
-        evidence: [{ ...relationshipRisk.evidence[0]!, value: 'unknown' }],
-      }],
+      riskFactors: [
+        {
+          ...relationshipRisk,
+          evidence: [{ ...relationshipRisk.evidence[0]!, value: 'unknown' }],
+        },
+      ],
     });
     expect(checkAssessmentGrounding(unknownOnlyRisk, unknownSnapshot)).toMatchObject({
       grounded: false,
       unresolved: ['riskFactors[0].evidence[0]'],
     });
+
+    const crmNote = unknownSnapshot.crm.data.notes[0]!;
+    const sensitiveCrmBodyRisk = canonicalizeAssessmentNarratives({
+      ...prepared.assessment!,
+      riskFactors: [
+        {
+          ...relationshipRisk,
+          evidence: [
+            {
+              ref: {
+                source: 'crm',
+                recordId: crmNote.recordId,
+                fieldPath: 'body',
+                window: snapshot.window,
+              },
+              metricOrQuote: 'crm.body',
+              value: crmNote.body,
+            },
+          ],
+        },
+      ],
+    });
+    expect(checkAssessmentGrounding(sensitiveCrmBodyRisk, snapshot)).toMatchObject({
+      grounded: false,
+      unresolved: ['riskFactors[0].evidence[0]'],
+    });
+    expect(sensitiveCrmBodyRisk.riskFactors[0]?.evidence[0]?.value).toBe('[REDACTED]');
+    expect(sensitiveCrmBodyRisk.riskFactors[0]?.explanation).not.toContain(crmNote.body);
+
+    if (snapshot.support.status !== 'available') throw new Error('Support fixture is unavailable');
+    const supportTicket = snapshot.support.data.tickets[0]!;
+    const sensitiveSupportSubjectRisk = canonicalizeAssessmentNarratives({
+      ...prepared.assessment!,
+      riskFactors: [
+        {
+          ...relationshipRisk,
+          category: 'support',
+          evidence: [
+            {
+              ref: {
+                source: 'support',
+                recordId: supportTicket.recordId,
+                fieldPath: 'subject',
+                window: snapshot.window,
+              },
+              metricOrQuote: 'support.subject',
+              value: supportTicket.subject,
+            },
+          ],
+        },
+      ],
+    });
+    expect(checkAssessmentGrounding(sensitiveSupportSubjectRisk, snapshot)).toMatchObject({
+      grounded: false,
+      unresolved: ['riskFactors[0].evidence[0]'],
+    });
+    expect(sensitiveSupportSubjectRisk.riskFactors[0]?.evidence[0]?.value).toBe('[REDACTED]');
+    expect(sensitiveSupportSubjectRisk.riskFactors[0]?.explanation).not.toContain(supportTicket.subject);
   });
 
   it('makes request identity authoritative over model-generated identity', async () => {
@@ -185,7 +242,7 @@ describe('customer success service', () => {
     });
     expect(first.drift?.baseline).toBe(true);
     expect(second.drift).toMatchObject({ baseline: false, direction: 'stable', scoreDelta: 0 });
-    expect(second.drift?.factorChanges.every((change) => change.status === 'persistent')).toBe(true);
+    expect(second.drift?.factorChanges.every(change => change.status === 'persistent')).toBe(true);
   });
 
   it('keeps account memory isolated by tenant and account', async () => {
@@ -268,7 +325,7 @@ describe('customer success service', () => {
     const system = createTestSystem({ clock });
     const baseCrm = system.fixtures;
     const crm: CrmRepository = {
-      listAccounts: (tenantId) => baseCrm.listAccounts(tenantId),
+      listAccounts: tenantId => baseCrm.listAccounts(tenantId),
       async getCrmNotes(query) {
         const result = await baseCrm.getCrmNotes(query);
         if (query.window.end === fixtureAsOf || result.status !== 'available') return result;

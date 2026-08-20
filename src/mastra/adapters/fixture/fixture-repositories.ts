@@ -37,13 +37,12 @@ export interface FixtureRepositoryOptions {
 }
 
 function inside(timestamp: string, query: AccountQuery): boolean {
-  return Date.parse(timestamp) >= Date.parse(query.window.start) &&
-    Date.parse(timestamp) <= Date.parse(query.window.end);
+  return (
+    Date.parse(timestamp) >= Date.parse(query.window.start) && Date.parse(timestamp) <= Date.parse(query.window.end)
+  );
 }
 
-export class FixtureRepositories
-  implements UsageRepository, SupportRepository, BillingRepository, CrmRepository
-{
+export class FixtureRepositories implements UsageRepository, SupportRepository, BillingRepository, CrmRepository {
   private bookPromise?: Promise<FixtureBook>;
 
   constructor(
@@ -52,9 +51,7 @@ export class FixtureRepositories
   ) {}
 
   private load(): Promise<FixtureBook> {
-    this.bookPromise ??= readFile(this.fixturePath, 'utf8').then((value) =>
-      fixtureBookSchema.parse(JSON.parse(value)),
-    );
+    this.bookPromise ??= readFile(this.fixturePath, 'utf8').then(value => fixtureBookSchema.parse(JSON.parse(value)));
     return this.bookPromise;
   }
 
@@ -68,14 +65,14 @@ export class FixtureRepositories
 
   async listAccounts(tenantId: string): Promise<readonly Account[]> {
     const book = await this.load();
-    return book.accounts.filter((account) => account.tenantId === tenantId);
+    return book.accounts.filter(account => account.tenantId === tenantId);
   }
 
   async getUsage(query: AccountQuery): Promise<SourceReadResult<UsageSeries>> {
     const snapshot = await this.snapshot(query);
     if (!snapshot || snapshot.usage.status === 'empty') return { status: 'empty' };
     if (snapshot.usage.status === 'unavailable') return snapshot.usage;
-    const points = snapshot.usage.data.points.filter((point) => inside(point.timestamp, query));
+    const points = snapshot.usage.data.points.filter(point => inside(point.timestamp, query));
     if (points.length === 0) return { status: 'empty' };
     return {
       status: 'available',
@@ -93,7 +90,7 @@ export class FixtureRepositories
     const snapshot = await this.snapshot(query);
     if (!snapshot || snapshot.support.status === 'empty') return { status: 'empty' };
     if (snapshot.support.status === 'unavailable') return snapshot.support;
-    const tickets = snapshot.support.data.tickets.filter((ticket) => inside(ticket.createdAt, query));
+    const tickets = snapshot.support.data.tickets.filter(ticket => inside(ticket.createdAt, query));
     if (tickets.length === 0) return { status: 'empty' };
     return {
       status: 'available',
@@ -126,7 +123,7 @@ export class FixtureRepositories
     const snapshot = await this.snapshot(query);
     if (!snapshot || snapshot.crm.status === 'empty') return { status: 'empty' };
     if (snapshot.crm.status === 'unavailable') return snapshot.crm;
-    const notes = snapshot.crm.data.notes.filter((note) => inside(note.createdAt, query));
+    const notes = snapshot.crm.data.notes.filter(note => inside(note.createdAt, query));
     if (notes.length === 0) return { status: 'empty' };
     return {
       status: 'available',

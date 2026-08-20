@@ -1,11 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 
 import { createFixtureRuntime } from '../src/mastra/adapters/fixture/fixture-runtime.js';
-import {
-  approvalRequestSchema,
-  preparedRunSchema,
-  type ApprovalDecision,
-} from '../src/mastra/schemas/index.js';
+import { approvalRequestSchema, preparedRunSchema, type ApprovalDecision } from '../src/mastra/schemas/index.js';
 import { executeScheduledAccountReviews } from '../src/mastra/workflows/scheduled-workflow.js';
 
 const runtime = createFixtureRuntime();
@@ -21,7 +17,7 @@ const batch = await executeScheduledAccountReviews(
     },
   },
   runtime.accountWorkflow,
-  { tenantId, asOf: runtime.asOf },
+  {},
 );
 
 const approvalRunId = 'fixture-approval-demo';
@@ -31,10 +27,7 @@ accountContext.set('tenant-id', tenantId);
 accountContext.set('account-id', '340734348989');
 const prepared = await approvalRun.start({
   inputData: {
-    runId: approvalRunId,
-    tenantId,
     accountId: '340734348989',
-    asOf: runtime.asOf,
   },
   requestContext: accountContext,
 });
@@ -67,7 +60,7 @@ if (approved.status !== 'success' || approved.result.outcome !== 'written') {
   throw new Error(`Fixture approval did not write: ${approved.status}`);
 }
 
-const prepareStep = prepared.steps['prepare-account-review'];
+const prepareStep = prepared.steps['record-assessment-monitoring'];
 if (prepareStep?.status !== 'success') throw new Error('Prepared fixture output was missing');
 const preparedOutput = preparedRunSchema.parse(prepareStep.output);
 const replay = await runtime.service.finalize(preparedOutput, decision);
@@ -76,10 +69,7 @@ const rejectionRunId = 'fixture-rejection-demo';
 const rejectionRun = await runtime.accountWorkflow.createRun({ runId: rejectionRunId });
 const rejectionPrepared = await rejectionRun.start({
   inputData: {
-    runId: rejectionRunId,
-    tenantId,
     accountId: '340734348989',
-    asOf: runtime.asOf,
   },
   requestContext: accountContext,
 });
@@ -118,6 +108,9 @@ console.log(
         outcome: approved.result.outcome,
         writeId: approved.result.writeId,
         created: approved.result.created,
+        taskIds: approved.result.taskIds,
+        tasksCreated: approved.result.tasksCreated,
+        tasksReused: approved.result.tasksReused,
       },
       rejection: { outcome: rejected.result.outcome, writeId: rejected.result.writeId },
       replay: {

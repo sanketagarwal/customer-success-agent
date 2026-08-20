@@ -16,18 +16,14 @@ import { createScheduledWorkflow } from './workflows/scheduled-workflow.js';
 
 export const composition = createComposition(loadConfig());
 export const customerSuccessAccountWorkflow = createAccountWorkflow(composition);
-export const weeklyCustomerSuccessWorkflow = createScheduledWorkflow(
-  composition,
-  customerSuccessAccountWorkflow,
-);
+export const weeklyCustomerSuccessWorkflow = createScheduledWorkflow(composition, customerSuccessAccountWorkflow);
 
 export const mastra = new Mastra({
   storage: composition.storage,
   agents: { customerSuccessAgent: composition.agent },
   workflows: { customerSuccessAccountWorkflow, weeklyCustomerSuccessWorkflow },
-  // createTool instances are valid ToolActions at runtime; this cast works around
-  // the optional execute property exposed by the current @mastra/core declaration
-  // under TypeScript's exactOptionalPropertyTypes mode.
+  // createTool returns an optional execute signature while Mastra's registry
+  // currently requires it; the tools are executable and validated at runtime.
   tools: composition.crmTools as unknown as Record<string, ToolAction<any, any>>,
   scorers: {
     groundednessScorer,
@@ -43,16 +39,7 @@ export const mastra = new Mastra({
         exporters: [new MastraStorageExporter({ strategy: 'realtime' })],
         spanOutputProcessors: [
           new SensitiveDataFilter({
-            sensitiveFields: [
-              'authorization',
-              'token',
-              'body',
-              'subject',
-              'feedback',
-              'notes',
-              'crmNotes',
-              'email',
-            ],
+            sensitiveFields: ['authorization', 'token', 'body', 'subject', 'feedback', 'notes', 'crmNotes', 'email'],
           }),
         ],
         requestContextKeys: ['tenant-id', 'account-id'],

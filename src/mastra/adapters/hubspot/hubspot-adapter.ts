@@ -5,6 +5,7 @@ import type {
   AccountQuery,
   Clock,
   CrmRepository,
+  CrmTaskWriteResult,
   CrmWriteIntentStore,
   CrmWriteInput,
   CrmWriteResult,
@@ -24,9 +25,7 @@ const pageSchema = z.object({
   paging: z.object({ next: z.object({ after: z.string() }) }).optional(),
 });
 
-const hubSpotIdSchema = z
-  .union([z.string().min(1), z.number().int().nonnegative()])
-  .transform(String);
+const hubSpotIdSchema = z.union([z.string().min(1), z.number().int().nonnegative()]).transform(String);
 
 const associationPageSchema = z.object({
   results: z.array(z.object({ toObjectId: hubSpotIdSchema })),
@@ -47,7 +46,8 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
   private readonly fetcher: typeof globalThis.fetch;
   private readonly renewalProperty: string;
   private taskCompanyAssociationType?: Promise<number>;
-  private readonly writeLocks = new Map<string, Promise<CrmWriteResult>>();
+  private readonly taskWriteLocks = new Map<string, Promise<CrmTaskWriteResult>>();
+  private readonly noteWriteLocks = new Map<string, Promise<CrmWriteResult>>();
 
   constructor(private readonly options: HubSpotAdapterOptions) {
     this.fetcher = options.fetch ?? globalThis.fetch;
@@ -60,11 +60,7 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
     }
   }
 
-  private async request(
-    path: string,
-    init?: RequestInit,
-    options: { retry?: boolean } = {},
-  ): Promise<unknown> {
+  private async request(path: string, init?: RequestInit, options: { retry?: boolean } = {}): Promise<unknown> {
     const attempts = options.retry === false ? 1 : 3;
     let lastError: unknown;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -85,17 +81,19 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
         lastError = new Error(`HubSpot ${response.status}: ${text}`);
         if (attempt + 1 < attempts) {
           const retryAfter = Number(response.headers.get('retry-after') ?? 0);
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.min(retryAfter * 1000 || 250 * 2 ** attempt, 2000)),
-          );
+          await new Promise(resolve => setTimeout(resolve, Math.min(retryAfter * 1000 || 250 * 2 ** attempt, 2000)));
         }
       } catch (error) {
         lastError = error;
-        if (error instanceof Error && error.message.startsWith('HubSpot 4') && !error.message.startsWith('HubSpot 429')) {
+        if (
+          error instanceof Error &&
+          error.message.startsWith('HubSpot 4') &&
+          !error.message.startsWith('HubSpot 429')
+        ) {
           throw error;
         }
         if (attempt + 1 < attempts) {
-          await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+          await new Promise(resolve => setTimeout(resolve, 250 * 2 ** attempt));
         }
       }
     }
@@ -116,7 +114,7 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
       if (after) params.set('after', after);
       const page = pageSchema.parse(await this.request(`/crm/v3/objects/companies?${params}`));
       accounts.push(
-        ...page.results.map((company) => ({
+        ...page.results.map(company => ({
           tenantId,
           accountId: company.id,
           name: company.properties.name || `HubSpot company ${company.id}`,
@@ -133,10 +131,14 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
     this.assertTenant(query.tenantId);
     try {
       const notes = await this.readCompanyNotes(query.accountId);
-      const filtered = notes.flatMap((note) => {
+      const filtered = notes.flatMap(note => {
         const occurredAt = normalizeDate(note.properties.hs_timestamp) ?? normalizeDate(note.createdAt);
-        if (!occurredAt || Date.parse(occurredAt) < Date.parse(query.window.start) ||
-          Date.parse(occurredAt) > Date.parse(query.window.end)) return [];
+        if (
+          !occurredAt ||
+          Date.parse(occurredAt) < Date.parse(query.window.start) ||
+          Date.parse(occurredAt) > Date.parse(query.window.end)
+        )
+          return [];
         return [{ note, occurredAt }];
       });
       if (filtered.length === 0) return { status: 'empty' };
@@ -163,29 +165,54 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
     }
   }
 
-  async writeApprovedDraft(input: CrmWriteInput): Promise<CrmWriteResult> {
+  async writeApprovedTasks(input: CrmWriteInput): Promise<CrmTaskWriteResult> {
     this.assertTenant(input.tenantId);
-    const active = this.writeLocks.get(input.idempotencyKey);
+    const active = this.taskWriteLocks.get(input.idempotencyKey);
     if (active) return active;
-    const operation = this.writeApprovedDraftUnlocked(input);
-    this.writeLocks.set(input.idempotencyKey, operation);
+    const operation = this.writeApprovedTasksUnlocked(input);
+    this.taskWriteLocks.set(input.idempotencyKey, operation);
     try {
       return await operation;
     } finally {
-      if (this.writeLocks.get(input.idempotencyKey) === operation) {
-        this.writeLocks.delete(input.idempotencyKey);
+      if (this.taskWriteLocks.get(input.idempotencyKey) === operation) {
+        this.taskWriteLocks.delete(input.idempotencyKey);
       }
     }
   }
 
-  private async writeApprovedDraftUnlocked(input: CrmWriteInput): Promise<CrmWriteResult> {
+  async writeApprovedNote(input: CrmWriteInput): Promise<CrmWriteResult> {
+    this.assertTenant(input.tenantId);
+    const active = this.noteWriteLocks.get(input.idempotencyKey);
+    if (active) return active;
+    const operation = this.writeApprovedNoteUnlocked(input);
+    this.noteWriteLocks.set(input.idempotencyKey, operation);
+    try {
+      return await operation;
+    } finally {
+      if (this.noteWriteLocks.get(input.idempotencyKey) === operation) {
+        this.noteWriteLocks.delete(input.idempotencyKey);
+      }
+    }
+  }
+
+  async writeApprovedDraft(input: CrmWriteInput): Promise<CrmWriteResult> {
+    await this.writeApprovedTasks(input);
+    return this.writeApprovedNote(input);
+  }
+
+  private async writeApprovedTasksUnlocked(input: CrmWriteInput): Promise<CrmTaskWriteResult> {
     const marker = `[customer-success-idempotency:${input.idempotencyKey}]`;
     let tasks = await this.readCompanyTasks(input.accountId);
     const associationTypeId = await this.getTaskCompanyAssociationType();
+    const taskIds: string[] = [];
+    let createdCount = 0;
+    let existingCount = 0;
     for (const action of input.plan.actions) {
       const taskMarker = `${marker}[action:${action.id}]`;
-      const existingTask = tasks.find((task) => task.properties.hs_task_body?.includes(taskMarker));
+      const existingTask = tasks.find(task => task.properties.hs_task_body?.includes(taskMarker));
       if (existingTask) {
+        taskIds.push(existingTask.id);
+        existingCount += 1;
         await this.options.intents.completeIntent(
           taskMarker,
           existingTask.id,
@@ -193,13 +220,14 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
         );
         continue;
       }
-      const claimed = await this.options.intents.claim(
-        taskMarker,
-        this.options.clock.now().toISOString(),
-      );
+      const claimed = await this.options.intents.claim(taskMarker, this.options.clock.now().toISOString());
       if (!claimed) {
         const intent = await this.options.intents.getIntent(taskMarker);
-        if (intent?.status === 'completed') continue;
+        if (intent?.status === 'completed' && intent.writeId) {
+          taskIds.push(intent.writeId);
+          existingCount += 1;
+          continue;
+        }
         throw new ProviderUnavailableError(
           'hubspot',
           'A durable task write intent is pending; retry after HubSpot associations converge',
@@ -244,18 +272,15 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
         } catch (reconciliationError) {
           throw reconciliationError;
         }
-        const reconciled = tasks.some((task) =>
-          task.properties.hs_task_body?.includes(taskMarker),
-        );
-        if (!reconciled) throw error;
-        const reconciledTask = tasks.find((task) =>
-          task.properties.hs_task_body?.includes(taskMarker),
-        )!;
+        const reconciledTask = tasks.find(task => task.properties.hs_task_body?.includes(taskMarker));
+        if (!reconciledTask) throw error;
         await this.options.intents.completeIntent(
           taskMarker,
           reconciledTask.id,
           reconciledTask.properties.hs_timestamp ?? reconciledTask.createdAt,
         );
+        taskIds.push(reconciledTask.id);
+        createdCount += 1;
         continue;
       }
       const createdTask = objectSchema.parse(rawCreatedTask);
@@ -264,9 +289,22 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
         createdTask.id,
         createdTask.properties.hs_timestamp ?? createdTask.createdAt,
       );
+      taskIds.push(createdTask.id);
+      createdCount += 1;
     }
 
-    const existing = (await this.readCompanyNotes(input.accountId)).find((note) =>
+    return {
+      taskIds,
+      idempotencyKey: input.idempotencyKey,
+      createdCount,
+      existingCount,
+      completedAt: this.options.clock.now().toISOString(),
+    };
+  }
+
+  private async writeApprovedNoteUnlocked(input: CrmWriteInput): Promise<CrmWriteResult> {
+    const marker = `[customer-success-idempotency:${input.idempotencyKey}]`;
+    const existing = (await this.readCompanyNotes(input.accountId)).find(note =>
       note.properties.hs_note_body?.includes(marker),
     );
     if (existing) {
@@ -279,10 +317,7 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
         writtenAt,
       };
     }
-    const noteClaimed = await this.options.intents.claim(
-      marker,
-      this.options.clock.now().toISOString(),
-    );
+    const noteClaimed = await this.options.intents.claim(marker, this.options.clock.now().toISOString());
     if (!noteClaimed) {
       const intent = await this.options.intents.getIntent(marker);
       if (intent?.status === 'completed' && intent.writeId) {
@@ -306,7 +341,7 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
       `<p>Health: ${escapeHtml(input.assessment.status)} (${input.assessment.score}/100)</p>`,
       `<p>${escapeHtml(input.assessment.summary)}</p>`,
       '<strong>Plan</strong>',
-      `<ul>${input.plan.actions.map((action) => `<li>${escapeHtml(action.title)}</li>`).join('')}</ul>`,
+      `<ul>${input.plan.actions.map(action => `<li>${escapeHtml(action.title)}</li>`).join('')}</ul>`,
       '<strong>Outreach draft — not sent</strong>',
       `<p>${escapeHtml(input.outreach.subject)}</p>`,
       `<p>${escapeHtml(input.outreach.body)}</p>`,
@@ -340,7 +375,7 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
       }
       let reconciled;
       try {
-        reconciled = (await this.readCompanyNotes(input.accountId)).find((note) =>
+        reconciled = (await this.readCompanyNotes(input.accountId)).find(note =>
           note.properties.hs_note_body?.includes(marker),
         );
       } catch (reconciliationError) {
@@ -361,26 +396,19 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
   }
 
   private async readCompanyNotes(companyId: string) {
-    return this.readAssociatedObjects(
-      companyId,
-      'notes',
-      ['hs_timestamp', 'hs_note_body', 'hubspot_owner_id'],
-    );
+    return this.readAssociatedObjects(companyId, 'notes', ['hs_timestamp', 'hs_note_body', 'hubspot_owner_id']);
   }
 
   private async readCompanyTasks(companyId: string) {
-    return this.readAssociatedObjects(
-      companyId,
-      'tasks',
-      ['hs_timestamp', 'hs_task_body', 'hs_task_subject', 'hs_task_status'],
-    );
+    return this.readAssociatedObjects(companyId, 'tasks', [
+      'hs_timestamp',
+      'hs_task_body',
+      'hs_task_subject',
+      'hs_task_status',
+    ]);
   }
 
-  private async readAssociatedObjects(
-    companyId: string,
-    objectType: 'notes' | 'tasks',
-    properties: string[],
-  ) {
+  private async readAssociatedObjects(companyId: string, objectType: 'notes' | 'tasks', properties: string[]) {
     const ids: string[] = [];
     let after: string | undefined;
     do {
@@ -391,7 +419,7 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
           `/crm/v4/objects/companies/${encodeURIComponent(companyId)}/associations/${objectType}?${params}`,
         ),
       );
-      ids.push(...page.results.map((association) => association.toObjectId));
+      ids.push(...page.results.map(association => association.toObjectId));
       after = page.paging?.next.after;
     } while (after);
     if (ids.length === 0) return [];
@@ -402,7 +430,7 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
           method: 'POST',
           body: JSON.stringify({
             properties,
-            inputs: batchIds.map((id) => ({ id })),
+            inputs: batchIds.map(id => ({ id })),
           }),
         }),
       );
@@ -412,9 +440,7 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
   }
 
   private async getTaskCompanyAssociationType(): Promise<number> {
-    this.taskCompanyAssociationType ??= this.request(
-      '/crm/associations/2026-03/tasks/companies/labels',
-    ).then((value) => {
+    this.taskCompanyAssociationType ??= this.request('/crm/associations/2026-03/tasks/companies/labels').then(value => {
       const labels = z
         .object({
           results: z.array(
@@ -427,7 +453,7 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
         })
         .parse(value).results;
       const primary = labels.find(
-        (label) => label.category === 'HUBSPOT_DEFINED' && (label.label === null || label.label === undefined),
+        label => label.category === 'HUBSPOT_DEFINED' && (label.label === null || label.label === undefined),
       );
       if (!primary) throw new Error('HubSpot task-to-company association type was not found');
       return primary.typeId;
@@ -437,9 +463,8 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
 }
 
 function chunk<T>(values: readonly T[], size: number): T[][] {
-  return Array.from(
-    { length: Math.ceil(values.length / size) },
-    (_, index) => values.slice(index * size, (index + 1) * size),
+  return Array.from({ length: Math.ceil(values.length / size) }, (_, index) =>
+    values.slice(index * size, (index + 1) * size),
   );
 }
 

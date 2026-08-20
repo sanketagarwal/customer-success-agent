@@ -14,16 +14,16 @@ import { MockCrmWriter } from './mock-crm-writer.js';
 
 const fixtureAsOf = '2026-08-17T09:00:00.000Z';
 
-export function createFixtureRuntime(options: {
-  fixturePath?: string;
-  asOf?: string;
-  maxAccountConcurrency?: number;
-} = {}) {
+export function createFixtureRuntime(
+  options: {
+    fixturePath?: string;
+    asOf?: string;
+    maxAccountConcurrency?: number;
+  } = {},
+) {
   const asOf = options.asOf ?? fixtureAsOf;
   const clock = new FixedClock(new Date(asOf));
-  const fixtures = new FixtureRepositories(
-    options.fixturePath ?? resolve('data/fixtures/accounts.json'),
-  );
+  const fixtures = new FixtureRepositories(options.fixturePath ?? resolve('data/fixtures/accounts.json'));
   const store = new InMemoryOperationalStore();
   const writer = new MockCrmWriter(store, clock);
   const intelligence = new DeterministicCustomerSuccessIntelligence();
@@ -39,7 +39,11 @@ export function createFixtureRuntime(options: {
     monitoring: store,
     clock,
   });
-  const accountWorkflow = createAccountWorkflow({ service, operationalStore: store });
+  const accountWorkflow = createAccountWorkflow({
+    service,
+    operationalStore: store,
+    config: { tenantId: 'demo-tenant' },
+  });
   const scheduledWorkflow = createScheduledWorkflow(
     {
       crm: fixtures,

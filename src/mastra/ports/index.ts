@@ -6,6 +6,7 @@ import type {
   ApprovalRequest,
   BillingStatus,
   CrmNotes,
+  CrmTaskWriteResult,
   CrmWriteInput,
   CrmWriteResult,
   GenerationUsage,
@@ -43,6 +44,8 @@ export interface CrmRepository {
 }
 
 export interface CrmWriter {
+  writeApprovedTasks(input: CrmWriteInput): Promise<CrmTaskWriteResult>;
+  writeApprovedNote(input: CrmWriteInput): Promise<CrmWriteResult>;
   writeApprovedDraft(input: CrmWriteInput): Promise<CrmWriteResult>;
 }
 
@@ -111,4 +114,10 @@ export interface CustomerSuccessIntelligence {
   takeUsage?(tenantId: string, accountId: string): GenerationUsage;
 }
 
-export type { CrmWriteInput, CrmWriteResult, GenerationUsage, MonitoringEvent } from '../schemas/index.js';
+export type {
+  CrmTaskWriteResult,
+  CrmWriteInput,
+  CrmWriteResult,
+  GenerationUsage,
+  MonitoringEvent,
+} from '../schemas/index.js';

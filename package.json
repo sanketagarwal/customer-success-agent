@@ -1,7 +1,9 @@
 {
-  "name": "customer-success-agent",
+  "name": "template-customer-success-agent",
   "version": "1.0.0",
+  "description": "A provider-neutral customer-success agent that finds renewal risk, prepares follow-up, waits for CSM approval, and updates CRM.",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"
@@ -29,13 +31,15 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@types/node": "26.2.0",
+    "@types/node": "22.20.1",
     "mastra": "1.25.0",
-    "tsx": "4.20.6",
+    "tsx": "4.23.12",
     "typescript": "6.0.3",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   },
   "overrides": {
-    "@mastra/deployer": "1.59.0"
+    "mastra": {
+      "@mastra/deployer": "1.59.0"
+    }
   }
 }

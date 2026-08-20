@@ -5,10 +5,10 @@ import { z } from 'zod';
 const booleanString = z
   .enum(['true', 'false'])
   .default('false')
-  .transform((value) => value === 'true');
+  .transform(value => value === 'true');
 
 const configSchema = z.object({
-  DATA_SOURCE: z.enum(['fixture', 'hubspot']).default('fixture'),
+  CRM_PROVIDER: z.enum(['fixture', 'hubspot']).default('fixture'),
   TENANT_ID: z.string().min(1).default('demo-tenant'),
   FIXTURE_TENANT_ID: z.string().min(1).default('demo-tenant'),
   FIXTURE_PATH: z.string().default('./data/fixtures/accounts.json'),
@@ -18,7 +18,7 @@ const configSchema = z.object({
   CUSTOMER_SUCCESS_CRON: z.string().default('0 9 * * 1'),
   CUSTOMER_SUCCESS_TIMEZONE: z.string().default('UTC'),
   MAX_ACCOUNT_CONCURRENCY: z.coerce.number().int().min(1).max(25).default(4),
-  GENERATION_MODE: z.enum(['deterministic', 'model']).default('deterministic'),
+  GENERATION_MODE: z.enum(['deterministic', 'model']).default('model'),
   MODEL: z.string().min(1).default('openai/gpt-5-mini'),
   MODEL_INPUT_COST_PER_MILLION: z.coerce.number().nonnegative().default(0),
   MODEL_OUTPUT_COST_PER_MILLION: z.coerce.number().nonnegative().default(0),
@@ -34,12 +34,12 @@ export type AppConfig = ReturnType<typeof loadConfig>;
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
   const parsed = configSchema.parse(environment);
-  if (parsed.DATA_SOURCE === 'hubspot' && !parsed.HUBSPOT_PRIVATE_APP_TOKEN) {
-    throw new Error('HUBSPOT_PRIVATE_APP_TOKEN is required when DATA_SOURCE=hubspot');
+  if (parsed.CRM_PROVIDER === 'hubspot' && !parsed.HUBSPOT_PRIVATE_APP_TOKEN) {
+    throw new Error('HUBSPOT_PRIVATE_APP_TOKEN is required when CRM_PROVIDER=hubspot');
   }
   const projectDirectory = environment.INIT_CWD ?? environment.PWD ?? process.cwd();
   return {
-    dataSource: parsed.DATA_SOURCE,
+    crmProvider: parsed.CRM_PROVIDER,
     tenantId: parsed.TENANT_ID,
     fixtureTenantId: parsed.FIXTURE_TENANT_ID,
     fixturePath: resolve(projectDirectory, parsed.FIXTURE_PATH),
