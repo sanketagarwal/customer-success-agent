@@ -1,4 +1,4 @@
-import { canonicalJson, evidenceMatchesSource } from '../invariants/index.js';
+import { evidenceMatchesSource } from '../invariants/index.js';
 import type { AccountPlan, Evidence, HealthAssessment, OutreachDraft, SourceSnapshot } from '../schemas/index.js';
 
 export interface GroundingResult {
@@ -6,19 +6,70 @@ export interface GroundingResult {
   unresolved: string[];
 }
 
-function evidenceFact(evidence: Evidence): string {
-  return `${evidence.ref.source}.${evidence.ref.fieldPath}=${canonicalJson(evidence.value)}`;
-}
-
 function canonicalizeEvidence(evidence: Evidence): Evidence {
   return {
     ...evidence,
     metricOrQuote: `${evidence.ref.source}.${evidence.ref.fieldPath}`,
+    value: isPermittedEvidence(evidence) ? evidence.value : '[REDACTED]',
   };
 }
 
+const permittedEvidenceFields: Record<Evidence['ref']['source'], ReadonlySet<string>> = {
+  usage: new Set(['activeUsers', 'licensedSeats', 'events', 'adoptionRate']),
+  support: new Set(['createdAt', 'status', 'priority', 'satisfactionScore', 'resolutionHours']),
+  billing: new Set(['asOf', 'standing', 'renewalAt', 'daysPastDue', 'annualValue', 'currency']),
+  crm: new Set(['createdAt', 'sentiment']),
+};
+
+function formatEvidenceValue(evidence: Evidence): string {
+  const { fieldPath } = evidence.ref;
+  const { value } = evidence;
+  if (fieldPath === 'adoptionRate' && typeof value === 'number') return `${Math.round(value * 100)}%`;
+  if (fieldPath === 'standing' && typeof value === 'string') return value.replaceAll('_', ' ');
+  if (fieldPath.endsWith('At') && typeof value === 'string' && Number.isFinite(Date.parse(value))) {
+    return value.slice(0, 10);
+  }
+  return String(value);
+}
+
+function evidenceLabel(evidence: Evidence): string {
+  const labels: Partial<Record<Evidence['ref']['source'], Record<string, string>>> = {
+    usage: {
+      activeUsers: 'active users',
+      licensedSeats: 'licensed seats',
+      events: 'product events',
+      adoptionRate: 'product adoption',
+    },
+    support: {
+      createdAt: 'support ticket date',
+      status: 'support ticket status',
+      priority: 'support priority',
+      satisfactionScore: 'support satisfaction score',
+      resolutionHours: 'support resolution time in hours',
+    },
+    billing: {
+      asOf: 'billing status date',
+      standing: 'billing standing',
+      renewalAt: 'renewal date',
+      daysPastDue: 'days past due',
+      annualValue: 'annual contract value',
+      currency: 'billing currency',
+    },
+    crm: {
+      createdAt: 'CRM note date',
+      sentiment: 'CRM relationship sentiment',
+    },
+  };
+  return labels[evidence.ref.source]?.[evidence.ref.fieldPath] ?? evidence.metricOrQuote;
+}
+
 function evidenceNarrative(evidence: readonly Evidence[]): string {
-  return evidence.map(evidenceFact).join('; ');
+  if (evidence.length === 2 && evidence.every(item => item.ref.fieldPath === 'adoptionRate')) {
+    return `Product adoption changed from ${formatEvidenceValue(evidence[0]!)} to ${formatEvidenceValue(evidence[1]!)} during the review window.`;
+  }
+  const statements = evidence.map(item => `${evidenceLabel(item)} is ${formatEvidenceValue(item)}`);
+  const narrative = statements.join('; ');
+  return `${narrative.charAt(0).toUpperCase()}${narrative.slice(1)}.`;
 }
 
 function actionTitle(action: AccountPlan['actions'][number]): string {
@@ -42,6 +93,10 @@ function actionTitle(action: AccountPlan['actions'][number]): string {
 
 function isMeaningfulEvidence(value: Evidence['value']): boolean {
   return value !== null && !(typeof value === 'string' && ['', 'unknown', '[REDACTED]'].includes(value.trim()));
+}
+
+function isPermittedEvidence(evidence: Evidence): boolean {
+  return permittedEvidenceFields[evidence.ref.source].has(evidence.ref.fieldPath);
 }
 
 export function canonicalizeAssessmentNarratives(assessment: HealthAssessment): HealthAssessment {
@@ -80,7 +135,7 @@ export function canonicalizeOutreachNarratives(outreach: OutreachDraft): Outreac
   return {
     ...outreach,
     subject: 'Account review and next steps',
-    body: `Hi — I’d like to review these verified account signals with you: ${claims.map(claim => claim.text).join('; ')}. Please let me know a convenient time to align on next steps.`,
+    body: `Hi — I’d like to check in about a few verified account signals. ${claims.map(claim => claim.text).join(' ')} Could we find a convenient time to align on next steps?`,
     claims,
   };
 }
@@ -93,6 +148,7 @@ function unresolvedEvidence(
   return entries.flatMap((entry, entryIndex) =>
     entry.evidence.flatMap((item, evidenceIndex) =>
       evidenceMatchesSource(item, snapshot) &&
+      isPermittedEvidence(item) &&
       isMeaningfulEvidence(item.value) &&
       item.metricOrQuote === `${item.ref.source}.${item.ref.fieldPath}`
         ? []

@@ -272,9 +272,8 @@ export class HubSpotAdapter implements CrmRepository, CrmWriter {
         } catch (reconciliationError) {
           throw reconciliationError;
         }
-        const reconciled = tasks.some(task => task.properties.hs_task_body?.includes(taskMarker));
-        if (!reconciled) throw error;
-        const reconciledTask = tasks.find(task => task.properties.hs_task_body?.includes(taskMarker))!;
+        const reconciledTask = tasks.find(task => task.properties.hs_task_body?.includes(taskMarker));
+        if (!reconciledTask) throw error;
         await this.options.intents.completeIntent(
           taskMarker,
           reconciledTask.id,

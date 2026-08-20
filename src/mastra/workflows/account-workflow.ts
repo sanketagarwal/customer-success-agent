@@ -201,7 +201,7 @@ export function createAccountWorkflow(composition: AccountWorkflowDependencies) 
 
   const readCrm = createStep({
     id: 'read-crm-notes',
-    description: 'Read CRM notes from the configured adapter, including live HubSpot.',
+    description: 'Read normalized CRM notes from the configured adapter.',
     inputSchema: reviewInitializationSchema,
     outputSchema: crmReadSchema,
     retries: 2,

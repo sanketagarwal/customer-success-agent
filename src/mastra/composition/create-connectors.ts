@@ -27,8 +27,8 @@ export type ConnectorOverrides = Partial<CustomerSuccessConnectors>;
 /**
  * The single connector boundary for this template.
  *
- * Fixtures make the cloned project runnable immediately. HubSpot is included as
- * one example CRM implementation. Replace any returned port—or pass an override
+ * Fixtures provide ready-to-query source data. HubSpot is included as one
+ * example CRM implementation. Replace any returned port—or pass an override
  * from your own composition—to connect the systems your company uses.
  */
 export function createConnectors(
@@ -46,9 +46,12 @@ export function createConnectors(
   let crmWriter: CrmWriter = new MockCrmWriter(operationalStore, clock);
 
   if (config.crmProvider === 'hubspot') {
+    if (!config.hubspotToken) {
+      throw new Error('HubSpot CRM requires a private-app token');
+    }
     const hubspot = new HubSpotAdapter({
       tenantId: config.tenantId,
-      token: config.hubspotToken!,
+      token: config.hubspotToken,
       baseUrl: config.hubspotBaseUrl,
       renewalProperty: config.hubspotRenewalProperty,
       clock,

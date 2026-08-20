@@ -22,9 +22,8 @@ export const mastra = new Mastra({
   storage: composition.storage,
   agents: { customerSuccessAgent: composition.agent },
   workflows: { customerSuccessAccountWorkflow, weeklyCustomerSuccessWorkflow },
-  // createTool instances are valid ToolActions at runtime; this cast works around
-  // the optional execute property exposed by the current @mastra/core declaration
-  // under TypeScript's exactOptionalPropertyTypes mode.
+  // createTool returns an optional execute signature while Mastra's registry
+  // currently requires it; the tools are executable and validated at runtime.
   tools: composition.crmTools as unknown as Record<string, ToolAction<any, any>>,
   scorers: {
     groundednessScorer,

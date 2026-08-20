@@ -41,7 +41,8 @@ needed for tenant and account reporting.
 
 ### Assessment event
 
-`prepare()` measures the complete preparation phase and records:
+The Studio workflow's `record-assessment-monitoring` step and the direct
+`prepare()` service API each record:
 
 - outcome, including `no_action`, `awaiting_approval`, `insufficient_data`,
   `unknown_retry`, or `grounding_failed`;
@@ -50,13 +51,14 @@ needed for tenant and account reporting.
 - model token usage and configured cost;
 - preparation latency.
 
-Retries produce separate assessment events because each call to `prepare()` is
-an observable attempt. This makes provider instability visible rather than
-hiding it inside the final result.
+A completed preparation emits one business event. Step-level retry attempts are
+visible in Mastra traces; if a source remains unavailable after its retry
+budget, the final assessment event records `unknown_retry`.
 
 ### Approval event
 
-`finalize()` records:
+The Studio workflow's `record-approval-monitoring` step and the direct
+`finalize()` service API record:
 
 - the CSM decision;
 - whether the outreach draft reached CRM;

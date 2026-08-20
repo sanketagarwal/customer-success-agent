@@ -100,8 +100,8 @@ Mastra agent with `structuredOutput` for three distinct artifacts:
 Structured output validates shape, but it is not the final safety boundary.
 `src/mastra/services/grounding.ts` independently resolves every evidence
 reference against the normalized source snapshot, replaces generated narrative
-with canonical evidence-backed text, and rejects unsupported, redacted, empty,
-null, or `unknown` evidence.
+with readable canonical evidence-backed text, and rejects unsupported,
+free-text, redacted, empty, null, or `unknown` evidence.
 
 Request identity is authoritative. Tenant ID comes from configuration, the
 account ID comes from the workflow input (prefilled with the at-risk fixture in

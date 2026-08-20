@@ -37,6 +37,8 @@ describe('customer success service', () => {
           'Resolve the verified billing risk',
           'Review the verified relationship signal',
         ]);
+        expect(result.outreach?.body).toContain('Product adoption changed from 72% to 31%');
+        expect(result.outreach?.body).not.toContain('usage.adoptionRate');
       }
     }
   });
@@ -109,6 +111,64 @@ describe('customer success service', () => {
       grounded: false,
       unresolved: ['riskFactors[0].evidence[0]'],
     });
+
+    const crmNote = unknownSnapshot.crm.data.notes[0]!;
+    const sensitiveCrmBodyRisk = canonicalizeAssessmentNarratives({
+      ...prepared.assessment!,
+      riskFactors: [
+        {
+          ...relationshipRisk,
+          evidence: [
+            {
+              ref: {
+                source: 'crm',
+                recordId: crmNote.recordId,
+                fieldPath: 'body',
+                window: snapshot.window,
+              },
+              metricOrQuote: 'crm.body',
+              value: crmNote.body,
+            },
+          ],
+        },
+      ],
+    });
+    expect(checkAssessmentGrounding(sensitiveCrmBodyRisk, snapshot)).toMatchObject({
+      grounded: false,
+      unresolved: ['riskFactors[0].evidence[0]'],
+    });
+    expect(sensitiveCrmBodyRisk.riskFactors[0]?.evidence[0]?.value).toBe('[REDACTED]');
+    expect(sensitiveCrmBodyRisk.riskFactors[0]?.explanation).not.toContain(crmNote.body);
+
+    if (snapshot.support.status !== 'available') throw new Error('Support fixture is unavailable');
+    const supportTicket = snapshot.support.data.tickets[0]!;
+    const sensitiveSupportSubjectRisk = canonicalizeAssessmentNarratives({
+      ...prepared.assessment!,
+      riskFactors: [
+        {
+          ...relationshipRisk,
+          category: 'support',
+          evidence: [
+            {
+              ref: {
+                source: 'support',
+                recordId: supportTicket.recordId,
+                fieldPath: 'subject',
+                window: snapshot.window,
+              },
+              metricOrQuote: 'support.subject',
+              value: supportTicket.subject,
+            },
+          ],
+        },
+      ],
+    });
+    expect(checkAssessmentGrounding(sensitiveSupportSubjectRisk, snapshot)).toMatchObject({
+      grounded: false,
+      unresolved: ['riskFactors[0].evidence[0]'],
+    });
+    expect(sensitiveSupportSubjectRisk.riskFactors[0]?.evidence[0]?.value).toBe('[REDACTED]');
+    expect(sensitiveSupportSubjectRisk.riskFactors[0]?.explanation).not.toContain(supportTicket.subject);
   });
 
   it('makes request identity authoritative over model-generated identity', async () => {

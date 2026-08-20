@@ -421,13 +421,16 @@ export class CustomerSuccessService {
   private async prepareInternal(input: NormalizedPrepareRunInput): Promise<PreparedRun> {
     const snapshot = await this.collect(input.tenantId, input.accountId, assessmentWindow(input.asOf));
     const assessed = await this.assessHealth(input, snapshot);
-    if (assessed.terminal || !assessed.assessment) return assessed.terminal!;
+    if (assessed.terminal) return assessed.terminal;
+    if (!assessed.assessment) throw new Error('Assessment stage returned no result');
     const risk = await this.calculateRiskDrift(input, assessed.previous, assessed.assessment);
     if (risk.terminal) return risk.terminal;
     const planned = await this.createPlan(input, snapshot, risk.assessment, risk.drift);
-    if (planned.terminal || !planned.plan) return planned.terminal!;
+    if (planned.terminal) return planned.terminal;
+    if (!planned.plan) throw new Error('Planning stage returned no result');
     const drafted = await this.draftOutreach(input, snapshot, risk.assessment, risk.drift, planned.plan);
-    if (drafted.terminal || !drafted.outreach) return drafted.terminal!;
+    if (drafted.terminal) return drafted.terminal;
+    if (!drafted.outreach) throw new Error('Outreach stage returned no result');
     return this.bindApprovalArtifacts(
       input,
       assessed.previous,

@@ -1,10 +1,6 @@
 import { createComposition } from '../src/mastra/composition/create-composition.js';
 import { loadConfig } from '../src/mastra/config.js';
 
-if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.GOOGLE_API_KEY) {
-  throw new Error('Set the API key required by MODEL before running the optional model-memory demo');
-}
-
 const config = loadConfig({
   ...process.env,
   CRM_PROVIDER: 'fixture',
@@ -13,6 +9,9 @@ const config = loadConfig({
   ENABLE_SEMANTIC_RECALL: 'true',
   MASTRA_DB_URL: process.env.MODEL_MEMORY_DB_URL ?? 'file:./data/model-memory-demo.db',
 });
+if (config.model.startsWith('openai/') && !process.env.OPENAI_API_KEY) {
+  throw new Error('OPENAI_API_KEY is required by the configured OpenAI model');
+}
 const composition = createComposition(config);
 const base = {
   tenantId: 'demo-tenant',

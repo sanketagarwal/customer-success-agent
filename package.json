@@ -24,17 +24,22 @@
   },
   "dependencies": {
     "@libsql/client": "0.17.4",
-    "@mastra/core": "latest",
-    "@mastra/libsql": "latest",
-    "@mastra/memory": "latest",
-    "@mastra/observability": "latest",
+    "@mastra/core": "1.59.0",
+    "@mastra/libsql": "1.20.0",
+    "@mastra/memory": "1.26.2",
+    "@mastra/observability": "1.17.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@types/node": "26.2.0",
-    "mastra": "latest",
-    "tsx": "4.20.6",
+    "@types/node": "22.20.1",
+    "mastra": "1.25.0",
+    "tsx": "4.23.12",
     "typescript": "6.0.3",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "mastra": {
+      "@mastra/deployer": "1.59.0"
+    }
   }
 }

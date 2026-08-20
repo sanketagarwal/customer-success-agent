@@ -1,14 +1,23 @@
 # Contributing
 
-This repository is auto-generated from the
-[Mastra monorepo](https://github.com/mastra-ai/mastra). Pull requests opened here
-will be ignored.
+Before opening a pull request, install from the lockfile and run the complete
+release gate:
 
-To contribute:
+```bash
+npm ci
+npm run validate
+npm audit --omit=dev --audit-level=high
+```
 
-1. Fork the [Mastra monorepo](https://github.com/mastra-ai/mastra).
-2. Find this template in `templates/template-customer-success-agent`.
-3. Make your changes.
-4. Open a pull request against the monorepo.
+Keep source adapters behind the interfaces in `src/mastra/ports`, add contract
+tests for new providers, and never commit credentials or production customer
+data.
 
-A bot syncs accepted changes to this repository.
+The Mastra packages are pinned as one tested compatibility set. Upgrade them
+together. The deployer override avoids a virtual-entry resolver regression in
+the 1.60 deployer; remove it only after a clean build on the replacement.
+
+For inclusion in the official catalog, propose the finished template under
+[`/templates`](https://github.com/mastra-ai/mastra/tree/main/templates) in the
+Mastra monorepo. Official templates may later be synced to standalone
+repositories.
