@@ -15,24 +15,22 @@ function jsonResponse(value: unknown, status = 200): Response {
 
 describe('HubSpot adapter', () => {
   it('maps HubSpot company IDs to provider-neutral account IDs with pagination', async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        jsonResponse({
-          results: [
-            {
-              id: '12345',
-              createdAt: '2026-01-01T00:00:00.000Z',
-              updatedAt: '2026-08-01T00:00:00.000Z',
-              properties: {
-                name: 'Example Company',
-                hubspot_owner_id: '77',
-                renewal_date: '2026-10-01T00:00:00.000Z',
-              },
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        results: [
+          {
+            id: '12345',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-08-01T00:00:00.000Z',
+            properties: {
+              name: 'Example Company',
+              hubspot_owner_id: '77',
+              renewal_date: '2026-10-01T00:00:00.000Z',
             },
-          ],
-        }),
-      );
+          },
+        ],
+      }),
+    );
     const intents = new InMemoryOperationalStore();
     const adapter = new HubSpotAdapter({
       tenantId: 'tenant',
@@ -55,23 +53,25 @@ describe('HubSpot adapter', () => {
   });
 
   it('filters CRM notes by their timeline timestamp instead of API creation time', async () => {
-    const fetcher = vi.fn<typeof fetch>(async (input) => {
+    const fetcher = vi.fn<typeof fetch>(async input => {
       const url = String(input);
       if (url.includes('/objects/companies/') && url.includes('/associations/notes')) {
         return jsonResponse({ results: [{ toObjectId: 'note-1' }] });
       }
       if (url.includes('/objects/notes/batch/read')) {
         return jsonResponse({
-          results: [{
-            id: 'note-1',
-            createdAt: '2026-09-01T00:00:00.000Z',
-            updatedAt: '2026-09-01T00:00:00.000Z',
-            properties: {
-              hs_timestamp: '1786536000000',
-              hs_note_body: 'Timeline note',
-              hubspot_owner_id: null,
+          results: [
+            {
+              id: 'note-1',
+              createdAt: '2026-09-01T00:00:00.000Z',
+              updatedAt: '2026-09-01T00:00:00.000Z',
+              properties: {
+                hs_timestamp: '1786536000000',
+                hs_note_body: 'Timeline note',
+                hubspot_owner_id: null,
+              },
             },
-          }],
+          ],
         });
       }
       throw new Error(`Unexpected HubSpot request: ${url}`);
@@ -85,11 +85,13 @@ describe('HubSpot adapter', () => {
       fetch: fetcher,
     });
 
-    await expect(adapter.getCrmNotes({
-      tenantId: 'tenant',
-      accountId: '12345',
-      window: { start: '2026-08-01T00:00:00.000Z', end: fixtureAsOf },
-    })).resolves.toMatchObject({
+    await expect(
+      adapter.getCrmNotes({
+        tenantId: 'tenant',
+        accountId: '12345',
+        window: { start: '2026-08-01T00:00:00.000Z', end: fixtureAsOf },
+      }),
+    ).resolves.toMatchObject({
       status: 'available',
       data: { notes: [{ recordId: 'note-1', createdAt: '2026-08-12T12:00:00.000Z' }] },
     });
@@ -105,8 +107,9 @@ describe('HubSpot adapter', () => {
         const after = new URL(url).searchParams.get('after');
         associationPages.push(after ?? 'first');
         return jsonResponse({
-          results: (after ? associationIds.slice(100) : associationIds.slice(0, 100))
-            .map((toObjectId) => ({ toObjectId: Number(toObjectId.slice(5)) })),
+          results: (after ? associationIds.slice(100) : associationIds.slice(0, 100)).map(toObjectId => ({
+            toObjectId: Number(toObjectId.slice(5)),
+          })),
           ...(after ? {} : { paging: { next: { after: 'page-2' } } }),
         });
       }
@@ -150,7 +153,7 @@ describe('HubSpot adapter', () => {
   });
 
   it('rejects malformed association IDs before issuing a batch read', async () => {
-    const fetcher = vi.fn<typeof fetch>(async (input) => {
+    const fetcher = vi.fn<typeof fetch>(async input => {
       const url = String(input);
       if (url.includes('/objects/companies/') && url.includes('/associations/notes')) {
         return jsonResponse({ results: [{ toObjectId: false }] });
@@ -166,11 +169,13 @@ describe('HubSpot adapter', () => {
       fetch: fetcher,
     });
 
-    await expect(adapter.getCrmNotes({
-      tenantId: 'tenant',
-      accountId: '12345',
-      window: { start: '2026-08-01T00:00:00.000Z', end: fixtureAsOf },
-    })).resolves.toMatchObject({ status: 'unavailable' });
+    await expect(
+      adapter.getCrmNotes({
+        tenantId: 'tenant',
+        accountId: '12345',
+        window: { start: '2026-08-01T00:00:00.000Z', end: fixtureAsOf },
+      }),
+    ).resolves.toMatchObject({ status: 'unavailable' });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
@@ -197,12 +202,15 @@ describe('HubSpot adapter', () => {
       }
       if (init?.method === 'POST' && (url.endsWith('/tasks') || url.endsWith('/notes'))) {
         createdObject += 1;
-        return jsonResponse({
-          id: `created-${createdObject}`,
-          createdAt: fixtureAsOf,
-          updatedAt: fixtureAsOf,
-          properties: {},
-        }, 201);
+        return jsonResponse(
+          {
+            id: `created-${createdObject}`,
+            createdAt: fixtureAsOf,
+            updatedAt: fixtureAsOf,
+            properties: {},
+          },
+          201,
+        );
       }
       throw new Error(`Unexpected HubSpot request: ${url}`);
     });
@@ -215,7 +223,7 @@ describe('HubSpot adapter', () => {
       intents,
       fetch: fetcher,
     });
-    const result = await adapter.writeApprovedDraft({
+    const input = {
       tenantId: prepared.tenantId,
       accountId: prepared.accountId,
       runId: prepared.runId,
@@ -223,12 +231,20 @@ describe('HubSpot adapter', () => {
       assessment: prepared.assessment!,
       plan: prepared.plan!,
       outreach: prepared.outreach!,
+    };
+    const tasks = await adapter.writeApprovedTasks(input);
+    const note = await adapter.writeApprovedNote(input);
+    expect(tasks).toMatchObject({
+      createdCount: prepared.plan!.actions.length,
+      existingCount: 0,
+      idempotencyKey: 'idempotency-test',
     });
-    expect(result).toMatchObject({ created: true, idempotencyKey: 'idempotency-test' });
+    expect(tasks.taskIds).toHaveLength(prepared.plan!.actions.length);
+    expect(note).toMatchObject({ created: true, idempotencyKey: 'idempotency-test' });
     const urls = fetcher.mock.calls.map(([input]) => String(input));
-    expect(urls.filter((url) => url.endsWith('/tasks'))).toHaveLength(prepared.plan!.actions.length);
-    expect(urls.some((url) => url.endsWith('/notes'))).toBe(true);
-    expect(urls.some((url) => url.includes('email'))).toBe(false);
+    expect(urls.filter(url => url.endsWith('/tasks'))).toHaveLength(prepared.plan!.actions.length);
+    expect(urls.some(url => url.endsWith('/notes'))).toBe(true);
+    expect(urls.some(url => url.includes('email'))).toBe(false);
   });
 
   it('rejects foreign-tenant reads and writes before any network call', async () => {
@@ -248,20 +264,24 @@ describe('HubSpot adapter', () => {
       fetch: fetcher,
     });
 
-    await expect(adapter.getCrmNotes({
-      tenantId: 'foreign-tenant',
-      accountId: prepared.accountId,
-      window: { start: '2026-07-20T09:00:00.000Z', end: fixtureAsOf },
-    })).rejects.toThrow('mismatched tenant');
-    await expect(adapter.writeApprovedDraft({
-      tenantId: 'foreign-tenant',
-      accountId: prepared.accountId,
-      runId: prepared.runId,
-      idempotencyKey: 'foreign-write',
-      assessment: prepared.assessment!,
-      plan: prepared.plan!,
-      outreach: prepared.outreach!,
-    })).rejects.toThrow('mismatched tenant');
+    await expect(
+      adapter.getCrmNotes({
+        tenantId: 'foreign-tenant',
+        accountId: prepared.accountId,
+        window: { start: '2026-07-20T09:00:00.000Z', end: fixtureAsOf },
+      }),
+    ).rejects.toThrow('mismatched tenant');
+    await expect(
+      adapter.writeApprovedDraft({
+        tenantId: 'foreign-tenant',
+        accountId: prepared.accountId,
+        runId: prepared.runId,
+        idempotencyKey: 'foreign-write',
+        assessment: prepared.assessment!,
+        plan: prepared.plan!,
+        outreach: prepared.outreach!,
+      }),
+    ).rejects.toThrow('mismatched tenant');
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -414,9 +434,7 @@ describe('HubSpot adapter', () => {
       intents,
       fetch: fetcher,
     });
-    await expect(restartedAdapter.writeApprovedDraft(input)).rejects.toThrow(
-      'durable task write intent is pending',
-    );
+    await expect(restartedAdapter.writeApprovedDraft(input)).rejects.toThrow('durable task write intent is pending');
     expect(taskCreates).toBe(1);
   });
 
@@ -425,7 +443,7 @@ describe('HubSpot adapter', () => {
     let failCompletion = true;
     const intents: CrmWriteIntentStore = {
       claim: (key, attemptedAt) => durable.claim(key, attemptedAt),
-      getIntent: (key) => durable.getIntent(key),
+      getIntent: key => durable.getIntent(key),
       async completeIntent(key, writeId, completedAt) {
         if (failCompletion) {
           failCompletion = false;
@@ -433,7 +451,7 @@ describe('HubSpot adapter', () => {
         }
         await durable.completeIntent(key, writeId, completedAt);
       },
-      releaseIntent: (key) => durable.releaseIntent(key),
+      releaseIntent: key => durable.releaseIntent(key),
     };
     const prepared = await createTestSystem().service.prepare({
       runId: 'hubspot-local-completion-failure',
@@ -454,12 +472,15 @@ describe('HubSpot adapter', () => {
       }
       if (init?.method === 'POST' && url.endsWith('/tasks')) {
         taskCreates += 1;
-        return jsonResponse({
-          id: 'created-task',
-          createdAt: fixtureAsOf,
-          updatedAt: fixtureAsOf,
-          properties: {},
-        }, 201);
+        return jsonResponse(
+          {
+            id: 'created-task',
+            createdAt: fixtureAsOf,
+            updatedAt: fixtureAsOf,
+            properties: {},
+          },
+          201,
+        );
       }
       throw new Error(`Unexpected HubSpot request: ${url}`);
     });

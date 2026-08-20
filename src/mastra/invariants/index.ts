@@ -9,12 +9,7 @@ export function scopeKey(tenantId: string, accountId: string): string {
   return `${tenantId.length}:${tenantId}|${accountId.length}:${accountId}`;
 }
 
-export function idempotencyKey(
-  tenantId: string,
-  accountId: string,
-  artifactType: string,
-  runOrAsOf: string,
-): string {
+export function idempotencyKey(tenantId: string, accountId: string, artifactType: string, runOrAsOf: string): string {
   return sha256(canonicalJson({ tenantId, accountId, artifactType, runOrAsOf }));
 }
 
@@ -52,10 +47,7 @@ function withinWindow(timestamp: string, ref: EvidenceRef): boolean {
   return value >= Date.parse(ref.window.start) && value <= Date.parse(ref.window.end);
 }
 
-function resolveEvidenceValue(
-  ref: EvidenceRef,
-  sources: SourceSnapshot,
-): { resolved: boolean; value?: unknown } {
+function resolveEvidenceValue(ref: EvidenceRef, sources: SourceSnapshot): { resolved: boolean; value?: unknown } {
   let records: readonly Record<string, unknown>[];
   if (ref.source === 'usage') {
     if (sources.usage.status !== 'available') return { resolved: false };
@@ -71,7 +63,7 @@ function resolveEvidenceValue(
     records = [sources.billing.data];
   } else return { resolved: false };
 
-  const record = records.find((candidate) => candidate.recordId === ref.recordId);
+  const record = records.find(candidate => candidate.recordId === ref.recordId);
   const value = record ? getAtPath(record, ref.fieldPath) : undefined;
   if (!record || value === undefined) return { resolved: false };
 
@@ -83,26 +75,22 @@ function resolveEvidenceValue(
         : typeof record.asOf === 'string'
           ? record.asOf
           : undefined;
-  return timestamp && !withinWindow(timestamp, ref)
-    ? { resolved: false }
-    : { resolved: true, value };
+  return timestamp && !withinWindow(timestamp, ref) ? { resolved: false } : { resolved: true, value };
 }
 
 export function evidenceMatchesSource(evidence: Evidence, sources: SourceSnapshot): boolean {
   const resolved = resolveEvidenceValue(evidence.ref, sources);
-  return resolved.resolved &&
+  return (
+    resolved.resolved &&
     evidence.ref.window.start === sources.window.start &&
     evidence.ref.window.end === sources.window.end &&
-    Object.is(resolved.value, evidence.value);
+    Object.is(resolved.value, evidence.value)
+  );
 }
 
 export function sourceSnapshotHash(snapshot: SourceSnapshot): string {
   const withoutWindow = (
-    result:
-      | SourceSnapshot['usage']
-      | SourceSnapshot['support']
-      | SourceSnapshot['billing']
-      | SourceSnapshot['crm'],
+    result: SourceSnapshot['usage'] | SourceSnapshot['support'] | SourceSnapshot['billing'] | SourceSnapshot['crm'],
   ) => {
     if (result.status !== 'available') return result;
     const { window: _window, ...data } = result.data as typeof result.data & {

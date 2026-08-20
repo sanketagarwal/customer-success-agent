@@ -16,10 +16,7 @@ import { createScheduledWorkflow } from './workflows/scheduled-workflow.js';
 
 export const composition = createComposition(loadConfig());
 export const customerSuccessAccountWorkflow = createAccountWorkflow(composition);
-export const weeklyCustomerSuccessWorkflow = createScheduledWorkflow(
-  composition,
-  customerSuccessAccountWorkflow,
-);
+export const weeklyCustomerSuccessWorkflow = createScheduledWorkflow(composition, customerSuccessAccountWorkflow);
 
 export const mastra = new Mastra({
   storage: composition.storage,
@@ -43,16 +40,7 @@ export const mastra = new Mastra({
         exporters: [new MastraStorageExporter({ strategy: 'realtime' })],
         spanOutputProcessors: [
           new SensitiveDataFilter({
-            sensitiveFields: [
-              'authorization',
-              'token',
-              'body',
-              'subject',
-              'feedback',
-              'notes',
-              'crmNotes',
-              'email',
-            ],
+            sensitiveFields: ['authorization', 'token', 'body', 'subject', 'feedback', 'notes', 'crmNotes', 'email'],
           }),
         ],
         requestContextKeys: ['tenant-id', 'account-id'],

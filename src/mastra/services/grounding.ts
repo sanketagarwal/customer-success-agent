@@ -1,11 +1,5 @@
 import { canonicalJson, evidenceMatchesSource } from '../invariants/index.js';
-import type {
-  AccountPlan,
-  Evidence,
-  HealthAssessment,
-  OutreachDraft,
-  SourceSnapshot,
-} from '../schemas/index.js';
+import type { AccountPlan, Evidence, HealthAssessment, OutreachDraft, SourceSnapshot } from '../schemas/index.js';
 
 export interface GroundingResult {
   grounded: boolean;
@@ -28,33 +22,30 @@ function evidenceNarrative(evidence: readonly Evidence[]): string {
 }
 
 function actionTitle(action: AccountPlan['actions'][number]): string {
-  if (action.evidence.some((item) => item.ref.source === 'usage')) {
+  if (action.evidence.some(item => item.ref.source === 'usage')) {
     return 'Review product adoption signals and recovery steps';
   }
-  if (action.evidence.some((item) => item.ref.source === 'support')) {
+  if (action.evidence.some(item => item.ref.source === 'support')) {
     return 'Resolve the verified support risk';
   }
-  if (action.evidence.some((item) => item.ref.fieldPath === 'renewalAt')) {
+  if (action.evidence.some(item => item.ref.fieldPath === 'renewalAt')) {
     return 'Align on renewal timing and next steps';
   }
-  if (action.evidence.some((item) => item.ref.source === 'billing')) {
+  if (action.evidence.some(item => item.ref.source === 'billing')) {
     return 'Resolve the verified billing risk';
   }
-  if (action.evidence.some((item) => item.ref.source === 'crm')) {
+  if (action.evidence.some(item => item.ref.source === 'crm')) {
     return 'Review the verified relationship signal';
   }
   return `Complete verified ${action.owner} follow-up`;
 }
 
 function isMeaningfulEvidence(value: Evidence['value']): boolean {
-  return value !== null &&
-    !(typeof value === 'string' && ['', 'unknown', '[REDACTED]'].includes(value.trim()));
+  return value !== null && !(typeof value === 'string' && ['', 'unknown', '[REDACTED]'].includes(value.trim()));
 }
 
-export function canonicalizeAssessmentNarratives(
-  assessment: HealthAssessment,
-): HealthAssessment {
-  const riskFactors = assessment.riskFactors.map((factor) => ({
+export function canonicalizeAssessmentNarratives(assessment: HealthAssessment): HealthAssessment {
+  const riskFactors = assessment.riskFactors.map(factor => ({
     ...factor,
     evidence: factor.evidence.map(canonicalizeEvidence),
     title: `Verified ${factor.category} risk (${factor.severity})`,
@@ -71,7 +62,7 @@ export function canonicalizePlanNarratives(plan: AccountPlan): AccountPlan {
   return {
     ...plan,
     objective: 'Address the verified account risks before the next customer checkpoint.',
-    actions: plan.actions.map((action) => ({
+    actions: plan.actions.map(action => ({
       ...action,
       evidence: action.evidence.map(canonicalizeEvidence),
       title: actionTitle(action),
@@ -81,7 +72,7 @@ export function canonicalizePlanNarratives(plan: AccountPlan): AccountPlan {
 }
 
 export function canonicalizeOutreachNarratives(outreach: OutreachDraft): OutreachDraft {
-  const claims = outreach.claims.map((claim) => ({
+  const claims = outreach.claims.map(claim => ({
     ...claim,
     evidence: claim.evidence.map(canonicalizeEvidence),
     text: evidenceNarrative(claim.evidence.map(canonicalizeEvidence)),
@@ -89,7 +80,7 @@ export function canonicalizeOutreachNarratives(outreach: OutreachDraft): Outreac
   return {
     ...outreach,
     subject: 'Account review and next steps',
-    body: `Hi — I’d like to review these verified account signals with you: ${claims.map((claim) => claim.text).join('; ')}. Please let me know a convenient time to align on next steps.`,
+    body: `Hi — I’d like to review these verified account signals with you: ${claims.map(claim => claim.text).join('; ')}. Please let me know a convenient time to align on next steps.`,
     claims,
   };
 }
@@ -121,19 +112,14 @@ function identityErrors(
   ];
 }
 
-export function checkAssessmentGrounding(
-  assessment: HealthAssessment,
-  snapshot: SourceSnapshot,
-): GroundingResult {
+export function checkAssessmentGrounding(assessment: HealthAssessment, snapshot: SourceSnapshot): GroundingResult {
   const canonical = canonicalizeAssessmentNarratives(assessment);
   const unresolved = [
     ...identityErrors(assessment, snapshot),
     ...unresolvedEvidence(assessment.riskFactors, snapshot, 'riskFactors'),
     ...(assessment.summary === canonical.summary ? [] : ['summary']),
     ...assessment.riskFactors.flatMap((factor, index) => [
-      ...(factor.title === canonical.riskFactors[index]?.title
-        ? []
-        : [`riskFactors[${index}].title`]),
+      ...(factor.title === canonical.riskFactors[index]?.title ? [] : [`riskFactors[${index}].title`]),
       ...(factor.explanation === canonical.riskFactors[index]?.explanation
         ? []
         : [`riskFactors[${index}].explanation`]),
@@ -150,18 +136,13 @@ export function checkPlanGrounding(plan: AccountPlan, snapshot: SourceSnapshot):
     ...(plan.objective === canonical.objective ? [] : ['objective']),
     ...plan.actions.flatMap((action, index) => [
       ...(action.title === canonical.actions[index]?.title ? [] : [`actions[${index}].title`]),
-      ...(action.rationale === canonical.actions[index]?.rationale
-        ? []
-        : [`actions[${index}].rationale`]),
+      ...(action.rationale === canonical.actions[index]?.rationale ? [] : [`actions[${index}].rationale`]),
     ]),
   ];
   return { grounded: unresolved.length === 0, unresolved };
 }
 
-export function checkOutreachGrounding(
-  outreach: OutreachDraft,
-  snapshot: SourceSnapshot,
-): GroundingResult {
+export function checkOutreachGrounding(outreach: OutreachDraft, snapshot: SourceSnapshot): GroundingResult {
   const canonical = canonicalizeOutreachNarratives(outreach);
   const unresolved = [
     ...identityErrors(outreach, snapshot),

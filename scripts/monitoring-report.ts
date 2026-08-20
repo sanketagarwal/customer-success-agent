@@ -5,7 +5,7 @@ const runtime = createFixtureRuntime();
 const tenantId = 'demo-tenant';
 const accounts = await runtime.fixtures.listAccounts(tenantId);
 const prepared = await Promise.all(
-  accounts.map((account) =>
+  accounts.map(account =>
     runtime.service.prepare({
       runId: `monitor-${account.accountId}`,
       tenantId,
@@ -14,7 +14,7 @@ const prepared = await Promise.all(
     }),
   ),
 );
-const risk = prepared.find((run) => run.outcome === 'awaiting_approval');
+const risk = prepared.find(run => run.outcome === 'awaiting_approval');
 if (!risk?.artifactHash || !risk.assessment) throw new Error('Monitoring approval fixture missing');
 await runtime.service.finalize(risk, {
   decision: 'approved',

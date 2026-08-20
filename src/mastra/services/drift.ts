@@ -16,13 +16,13 @@ export function calculateDrift(current: HealthAssessment, memory: AccountMemory 
       currentAsOf: current.asOf,
       scoreDelta: 0,
       direction: 'baseline',
-      factorChanges: current.riskFactors.map((factor) => ({ factorId: factor.id, status: 'new' })),
+      factorChanges: current.riskFactors.map(factor => ({ factorId: factor.id, status: 'new' })),
     };
   }
 
   const previous = previousEntry.assessment;
-  const previousById = new Map(previous.riskFactors.map((factor) => [factor.id, factor]));
-  const currentById = new Map(current.riskFactors.map((factor) => [factor.id, factor]));
+  const previousById = new Map(previous.riskFactors.map(factor => [factor.id, factor]));
+  const currentById = new Map(current.riskFactors.map(factor => [factor.id, factor]));
   const factorChanges: Drift['factorChanges'] = [];
 
   for (const factor of current.riskFactors) {
@@ -53,14 +53,11 @@ export function calculateDrift(current: HealthAssessment, memory: AccountMemory 
   };
 }
 
-export function applyFactorStatuses(
-  assessment: HealthAssessment,
-  drift: Drift,
-): HealthAssessment {
-  const statuses = new Map(drift.factorChanges.map((change) => [change.factorId, change.status]));
+export function applyFactorStatuses(assessment: HealthAssessment, drift: Drift): HealthAssessment {
+  const statuses = new Map(drift.factorChanges.map(change => [change.factorId, change.status]));
   return {
     ...assessment,
-    riskFactors: assessment.riskFactors.map((factor) => ({
+    riskFactors: assessment.riskFactors.map(factor => ({
       ...factor,
       status: statuses.get(factor.id) ?? factor.status,
     })),

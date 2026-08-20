@@ -3,10 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { FixtureRepositories } from '../src/mastra/adapters/fixture/fixture-repositories.js';
-import {
-  createComposition,
-  libSqlConnectionOptions,
-} from '../src/mastra/composition/create-composition.js';
+import { createComposition, libSqlConnectionOptions } from '../src/mastra/composition/create-composition.js';
 import { loadConfig } from '../src/mastra/config.js';
 import { fixtureAsOf } from './helpers.js';
 
@@ -33,16 +30,18 @@ describe('HubSpot and fixture hybrid mode', () => {
       status: 'available',
       data: { tenantId: 'customer-tenant', accountId: '340739743463' },
     });
-    await expect(fixtures.getUsage({
-      tenantId: 'customer-tenant',
-      accountId: 'not-a-fixture-account',
-      window: { start: '2026-07-20T09:00:00.000Z', end: fixtureAsOf },
-    })).resolves.toEqual({ status: 'empty' });
+    await expect(
+      fixtures.getUsage({
+        tenantId: 'customer-tenant',
+        accountId: 'not-a-fixture-account',
+        window: { start: '2026-07-20T09:00:00.000Z', end: fixtureAsOf },
+      }),
+    ).resolves.toEqual({ status: 'empty' });
   });
 
   it('keeps the hybrid composition clock pinned to fixture time', () => {
     const config = loadConfig({
-      DATA_SOURCE: 'hubspot',
+      CRM_PROVIDER: 'hubspot',
       TENANT_ID: 'customer-tenant',
       FIXTURE_TENANT_ID: 'demo-tenant',
       FIXTURE_NOW: fixtureAsOf,

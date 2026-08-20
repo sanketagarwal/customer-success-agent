@@ -14,7 +14,7 @@ export const groundednessScorer = createScorer<
     const checks = [checkAssessmentGrounding(run.output.assessment, run.input!.snapshot)];
     if (run.output.plan) checks.push(checkPlanGrounding(run.output.plan, run.input!.snapshot));
     if (run.output.outreach) checks.push(checkOutreachGrounding(run.output.outreach, run.input!.snapshot));
-    return checks.every((check) => check.grounded) ? 1 : 0;
+    return checks.every(check => check.grounded) ? 1 : 0;
   })
   .generateReason(({ run, score }) =>
     score === 1
@@ -26,18 +26,15 @@ export const groundednessScorer = createScorer<
         ].join(', ')}`,
   );
 
-export const riskFactorExtractionScorer = createScorer<
-  { expectedFactorIds: string[] },
-  HealthAssessment
->({
+export const riskFactorExtractionScorer = createScorer<{ expectedFactorIds: string[] }, HealthAssessment>({
   id: 'risk-factor-extraction',
   description: 'Measures expected risk-factor recall without rewarding unsupported extras.',
 }).generateScore(({ run }) => {
-  const actual = new Set(run.output.riskFactors.map((factor) => factor.id));
+  const actual = new Set(run.output.riskFactors.map(factor => factor.id));
   const expected = new Set(run.input!.expectedFactorIds);
   if (expected.size === 0) return actual.size === 0 ? 1 : 0;
-  const truePositives = [...expected].filter((id) => actual.has(id)).length;
-  const extras = [...actual].filter((id) => !expected.has(id)).length;
+  const truePositives = [...expected].filter(id => actual.has(id)).length;
+  const extras = [...actual].filter(id => !expected.has(id)).length;
   return Math.max(0, (truePositives - extras) / expected.size);
 });
 
@@ -47,29 +44,20 @@ export const accountPlanQualityScorer = createScorer<HealthAssessment, AccountPl
 }).generateScore(({ run }) => {
   if (run.output.actions.length === 0) return 0;
   const factorRefs = run.input!.riskFactors.map(
-    (factor) => new Set(factor.evidence.map((item) => JSON.stringify(item.ref))),
+    factor => new Set(factor.evidence.map(item => JSON.stringify(item.ref))),
   );
-  const coveredFactors = factorRefs.filter((refs) =>
-    run.output.actions.some((action) =>
-      action.evidence.some((item) => refs.has(JSON.stringify(item.ref))),
-    ),
+  const coveredFactors = factorRefs.filter(refs =>
+    run.output.actions.some(action => action.evidence.some(item => refs.has(JSON.stringify(item.ref)))),
   ).length;
-  const factorCoverage =
-    factorRefs.length === 0 ? 0 : coveredFactors / factorRefs.length;
-  const validActions = run.output.actions.filter((action) => {
-    const matchingFactor = run.input!.riskFactors.find((factor) =>
-      action.evidence.some((item) =>
-        factor.evidence.some((factorEvidence) =>
-          JSON.stringify(factorEvidence.ref) === JSON.stringify(item.ref),
-        ),
+  const factorCoverage = factorRefs.length === 0 ? 0 : coveredFactors / factorRefs.length;
+  const validActions = run.output.actions.filter(action => {
+    const matchingFactor = run.input!.riskFactors.find(factor =>
+      action.evidence.some(item =>
+        factor.evidence.some(factorEvidence => JSON.stringify(factorEvidence.ref) === JSON.stringify(item.ref)),
       ),
     );
     const expectedOwner =
-      matchingFactor?.category === 'billing'
-        ? 'billing'
-        : matchingFactor?.category === 'support'
-          ? 'support'
-          : 'csm';
+      matchingFactor?.category === 'billing' ? 'billing' : matchingFactor?.category === 'support' ? 'support' : 'csm';
     return (
       action.title.trim().length >= 12 &&
       action.rationale.trim().length >= 8 &&
@@ -86,14 +74,10 @@ export const personalizationScorer = createScorer<HealthAssessment, OutreachDraf
   description: 'Checks that outreach explicitly incorporates every account risk through grounded claims.',
 }).generateScore(({ run }) => {
   if (run.output.claims.length === 0 || run.output.body.length < 40 || !run.output.draftOnly) return 0;
-  const claimRefs = new Set(
-    run.output.claims.flatMap((claim) => claim.evidence.map((item) => JSON.stringify(item.ref))),
-  );
-  const riskRefs = run.input!.riskFactors.flatMap((factor) =>
-    factor.evidence.map((item) => JSON.stringify(item.ref)),
-  );
-  const risksCovered = riskRefs.length > 0 && riskRefs.every((ref) => claimRefs.has(ref));
-  const claimsUsed = run.output.claims.every((claim) => run.output.body.includes(claim.text));
+  const claimRefs = new Set(run.output.claims.flatMap(claim => claim.evidence.map(item => JSON.stringify(item.ref))));
+  const riskRefs = run.input!.riskFactors.flatMap(factor => factor.evidence.map(item => JSON.stringify(item.ref)));
+  const risksCovered = riskRefs.length > 0 && riskRefs.every(ref => claimRefs.has(ref));
+  const claimsUsed = run.output.claims.every(claim => run.output.body.includes(claim.text));
   return risksCovered && claimsUsed ? 1 : 0;
 });
 
@@ -102,10 +86,10 @@ export const actionRelevanceScorer = createScorer<HealthAssessment, AccountPlan>
   description: 'Measures whether plan actions map to identified account risks.',
 }).generateScore(({ run }) => {
   const factorRefs = new Set(
-    run.input!.riskFactors.flatMap((factor) => factor.evidence.map((item) => JSON.stringify(item.ref))),
+    run.input!.riskFactors.flatMap(factor => factor.evidence.map(item => JSON.stringify(item.ref))),
   );
-  const relevant = run.output.actions.filter((action) =>
-    action.evidence.some((item) => factorRefs.has(JSON.stringify(item.ref))),
+  const relevant = run.output.actions.filter(action =>
+    action.evidence.some(item => factorRefs.has(JSON.stringify(item.ref))),
   ).length;
   return run.output.actions.length === 0 ? 0 : relevant / run.output.actions.length;
 });

@@ -10,10 +10,11 @@ primitive to the code that uses it and explains its role in the safety model.
 ```mermaid
 flowchart TD
   S[Weekly scheduled workflow] --> F[Bounded account fan-out]
-  F --> P[Prepare account review]
-  P --> C[Collect usage, support, billing, and CRM signals]
+  F --> I[Initialize account review]
+  I --> C[Read usage, support, billing, and CRM in parallel]
   C --> A[Structured health assessment]
-  A --> G{Grounded and actionable?}
+  A --> D[Calculate risk drift]
+  D --> G{Grounded and actionable?}
   G -- No --> X[Stop with grounding_failed]
   G -- Healthy --> H[Stop with no_action]
   G -- At risk --> L[Create account plan and outreach draft]
@@ -21,7 +22,9 @@ flowchart TD
   U -- Reject --> R[Stop without CRM write]
   U -- Approve --> V[Re-read sources and validate binding]
   V -- Stale --> T[Require a new review]
-  V -- Current --> W[Write internal CRM note and follow-up tasks once]
+  V -- Current --> K[Create follow-up tasks once]
+  K --> W[Create internal CRM note once]
+  W --> M[Record approval monitoring]
 ```
 
 The workflow never sends customer-facing outreach. It stores the outreach as
@@ -37,7 +40,8 @@ configuration.
   at 09:00.
 - `CUSTOMER_SUCCESS_TIMEZONE` controls the schedule timezone. The default is
   UTC.
-- The scheduled input contains the configured tenant ID.
+- The scheduled trigger has no user-supplied fields; tenant ID comes from
+  configuration.
 - The fan-out step lists accounts through the active CRM adapter.
 - `MAX_ACCOUNT_CONCURRENCY` bounds parallel account execution between 1 and 25.
 - Each account receives its own workflow run ID and failure boundary. One
@@ -50,23 +54,33 @@ The scheduled workflow delegates account decisions to
 
 ## Account workflow, steps, and retries
 
-`src/mastra/workflows/account-workflow.ts` defines the three-step
-`customer-success-account` workflow:
+`src/mastra/workflows/account-workflow.ts` exposes the operational stages in
+Studio. The source layer contains four real parallel steps:
 
-1. `prepare-account-review` collects sources, builds the assessment, calculates
-   drift, creates the plan and outreach draft, and persists the approval
-   request when action is required.
-2. `request-csm-approval` suspends the run and exposes the approval request as
-   the suspend payload. Resuming the step supplies a Zod-validated approval or
-   rejection.
-3. `write-approved-crm-draft` revalidates the decision and current source data,
-   then invokes the configured CRM writer only when every guard passes.
+- `read-product-usage`;
+- `read-support-history`;
+- `read-billing-status`;
+- `read-crm-notes`.
 
-The preparation step and scheduled fan-out both declare `retries: 2`. Mastra
-therefore permits three total attempts. A retryable provider failure is raised
-as `ProviderUnavailableError` during the retry budget; after the final attempt,
-the run returns the explicit `unknown_retry` outcome instead of pretending that
-unavailable data is empty.
+The workflow then assembles the typed snapshot, assesses health and risk,
+calculates drift, creates the account plan, drafts outreach, binds the approval
+artifacts, and records assessment monitoring. `request-csm-approval` suspends
+the run and exposes the approval request as its payload.
+
+After resume, `validate-approval-freshness` re-reads all sources before any
+write. A current approval continues through separate
+`create-crm-follow-up-tasks` and `create-crm-internal-note` steps, followed by
+`record-approval-monitoring`. Rejections, healthy accounts, insufficient data,
+and failed grounding continue through the same graph as explicit no-write
+outputs, so every run remains inspectable.
+
+Each source-read step declares `retries: 2`, as does the scheduled fan-out.
+Mastra therefore permits three total attempts at each retry boundary. A
+retryable provider failure is raised as `ProviderUnavailableError` during the
+retry budget; after the final attempt, the run returns the explicit
+`unknown_retry` outcome instead of pretending unavailable data is empty. The
+two CRM write steps also retry safely because their operations use durable
+idempotency markers and write intents.
 
 ## Structured outputs and Zod contracts
 
@@ -89,9 +103,11 @@ reference against the normalized source snapshot, replaces generated narrative
 with canonical evidence-backed text, and rejects unsupported, redacted, empty,
 null, or `unknown` evidence.
 
-Request identity is authoritative. Model-produced tenant, account, and `asOf`
-values are overwritten with workflow input values before artifacts can reach
-memory, approval, or CRM writes.
+Request identity is authoritative. Tenant ID comes from configuration, the
+account ID comes from the workflow input (prefilled with the at-risk fixture in
+Studio), and `asOf` comes from the workflow clock. Those values overwrite
+model-produced identity before artifacts can reach memory, approval, or CRM
+writes.
 
 ## Agent
 
@@ -182,8 +198,8 @@ content.
 
 - Scheduled runs set `tenant-id` and `account-id` before starting each account
   workflow.
-- The preparation step rejects either value when it conflicts with workflow
-  input.
+- The initialization step rejects tenant identity that conflicts with
+  configuration or account identity that conflicts with workflow input.
 - A host application can set `csm-id` during resume. The approval step then
   requires `approverId` to match it.
 - Observability retains `tenant-id` and `account-id` as request-context keys for
@@ -203,9 +219,10 @@ suspends with:
 - the request time;
 - the maximum expiry time.
 
-The resume payload includes the CSM decision, approver identity, decision time,
-expiry, and the same hidden binding values. Before writing, the service checks
-the persisted request, exact hash binding, timestamp bounds, current source
+The Studio resume payload includes only the CSM decision, approver identity,
+and optional feedback. The workflow constructs decision time, expiry, and the
+hidden artifact bindings from its clock and persisted request. Before writing,
+the service checks the exact hash binding, timestamp bounds, current source
 snapshot hash, and optional RequestContext approver identity.
 
 Approval normally happens in Mastra Studio or a host application that calls the
@@ -216,11 +233,11 @@ same resume operation.
 
 `src/mastra/tools/crm-tools.ts` registers three provider-neutral Mastra tools:
 
-| Tool | Purpose | Approval |
-| --- | --- | --- |
-| `list-customer-accounts` | List normalized accounts | Read-only |
-| `read-customer-crm-notes` | Read normalized notes for one account and window | Read-only |
-| `write-approved-customer-success-draft` | Write an approved internal draft and tasks | Mastra tool approval required |
+| Tool                                    | Purpose                                          | Approval                      |
+| --------------------------------------- | ------------------------------------------------ | ----------------------------- |
+| `list-customer-accounts`                | List normalized accounts                         | Read-only                     |
+| `read-customer-crm-notes`               | Read normalized notes for one account and window | Read-only                     |
+| `write-approved-customer-success-draft` | Write an approved internal draft and tasks       | Mastra tool approval required |
 
 The tools depend on `CrmRepository` and `CrmWriter`, not HubSpot types. Adopters
 can replace HubSpot with another CRM without changing the workflow contracts.

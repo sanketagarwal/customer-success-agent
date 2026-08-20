@@ -2,25 +2,14 @@ import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 
 import { DeterministicCustomerSuccessIntelligence } from '../adapters/fixture/deterministic-intelligence.js';
-import { FixtureRepositories } from '../adapters/fixture/fixture-repositories.js';
-import { MockCrmWriter } from '../adapters/fixture/mock-crm-writer.js';
-import { HubSpotAdapter } from '../adapters/hubspot/hubspot-adapter.js';
 import { MastraCustomerSuccessIntelligence } from '../adapters/model/mastra-intelligence.js';
 import { createCustomerSuccessAgent } from '../agents/customer-success-agent.js';
-import { FixedClock } from '../clock.js';
 import type { AppConfig } from '../config.js';
 import { LibSqlOperationalStore } from '../memory/operational-stores.js';
-import type {
-  BillingRepository,
-  Clock,
-  CrmRepository,
-  CrmWriter,
-  CustomerSuccessIntelligence,
-  SupportRepository,
-  UsageRepository,
-} from '../ports/index.js';
+import type { Clock, CrmRepository, CrmWriter, CustomerSuccessIntelligence } from '../ports/index.js';
 import { CustomerSuccessService } from '../services/customer-success-service.js';
 import { createCrmTools, type CustomerSuccessCrmTools } from '../tools/crm-tools.js';
+import { createConnectors, type ConnectorOverrides } from './create-connectors.js';
 
 export interface Composition {
   config: AppConfig;
@@ -38,14 +27,7 @@ export function libSqlConnectionOptions(url: string, authToken?: string) {
   return { url, ...(authToken ? { authToken } : {}) };
 }
 
-export function createComposition(config: AppConfig): Composition {
-  // Usage, support, and billing remain fixture-backed in both v1 modes, so the
-  // operational clock stays pinned until those ports use live providers.
-  const clock: Clock = new FixedClock(new Date(config.fixtureNow));
-  const fixture = new FixtureRepositories(
-    config.fixturePath,
-    config.dataSource === 'hubspot' ? { sourceTenantId: config.fixtureTenantId } : {},
-  );
+export function createComposition(config: AppConfig, connectorOverrides: ConnectorOverrides = {}): Composition {
   const operationalStore = new LibSqlOperationalStore(config.databaseUrl, config.tursoAuthToken);
   const storage = new LibSQLStore({
     id: 'customer-success-storage',
@@ -58,9 +40,7 @@ export function createComposition(config: AppConfig): Composition {
         ...libSqlConnectionOptions(config.databaseUrl, config.tursoAuthToken),
       })
     : undefined;
-  const embedder = config.semanticRecall
-    ? new ModelRouterEmbeddingModel(config.embeddingModel)
-    : undefined;
+  const embedder = config.semanticRecall ? new ModelRouterEmbeddingModel(config.embeddingModel) : undefined;
   const agent = createCustomerSuccessAgent({
     model: config.model,
     storage,
@@ -69,23 +49,11 @@ export function createComposition(config: AppConfig): Composition {
     observationalMemory: config.observationalMemory,
   });
 
-  let crm: CrmRepository;
-  let crmWriter: CrmWriter;
-  if (config.dataSource === 'hubspot') {
-    const hubspot = new HubSpotAdapter({
-      tenantId: config.tenantId,
-      token: config.hubspotToken!,
-      baseUrl: config.hubspotBaseUrl,
-      renewalProperty: config.hubspotRenewalProperty,
-      clock,
-      intents: operationalStore,
-    });
-    crm = hubspot;
-    crmWriter = hubspot;
-  } else {
-    crm = fixture;
-    crmWriter = new MockCrmWriter(operationalStore, clock);
-  }
+  const { usage, support, billing, crm, crmWriter, clock } = createConnectors(
+    config,
+    operationalStore,
+    connectorOverrides,
+  );
 
   const intelligence: CustomerSuccessIntelligence =
     config.generationMode === 'model'
@@ -95,9 +63,6 @@ export function createComposition(config: AppConfig): Composition {
         })
       : new DeterministicCustomerSuccessIntelligence();
 
-  const usage: UsageRepository = fixture;
-  const support: SupportRepository = fixture;
-  const billing: BillingRepository = fixture;
   const service = new CustomerSuccessService({
     usage,
     support,

@@ -1,17 +1,13 @@
 import { createComposition } from '../src/mastra/composition/create-composition.js';
 import { loadConfig } from '../src/mastra/config.js';
 
-if (
-  !process.env.OPENAI_API_KEY &&
-  !process.env.ANTHROPIC_API_KEY &&
-  !process.env.GOOGLE_API_KEY
-) {
+if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.GOOGLE_API_KEY) {
   throw new Error('Set the API key required by MODEL before running the optional model-memory demo');
 }
 
 const config = loadConfig({
   ...process.env,
-  DATA_SOURCE: 'fixture',
+  CRM_PROVIDER: 'fixture',
   GENERATION_MODE: 'model',
   ENABLE_OBSERVATIONAL_MEMORY: 'true',
   ENABLE_SEMANTIC_RECALL: 'true',

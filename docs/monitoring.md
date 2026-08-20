@@ -16,24 +16,24 @@ or model providers change.
 contract. Every event includes correlation and timing fields plus the metrics
 needed for tenant and account reporting.
 
-| Field | Meaning |
-| --- | --- |
-| `eventId` | Unique event identifier |
-| `runId` | Mastra/account workflow run identifier |
-| `tenantId`, `accountId` | Reporting scope |
-| `phase` | `assessment` or `approval` |
-| `outcome` | Terminal domain outcome for that phase |
-| `riskScore` | Current health score, or null when no assessment exists |
-| `scoreDelta` | Change from the prior assessment |
-| `recommendationCount` | Number of proposed plan actions |
-| `acceptedRecommendationCount` | Actions counted as accepted after a successful write |
-| `approvalDecision` | Approved, rejected, or null |
-| `outreachApproved` | True only when the approved draft was written |
-| `hasHumanFeedback` | Whether feedback was supplied, without storing it in the event |
-| `inputTokens`, `outputTokens`, `totalTokens` | Account-level generation usage |
-| `costUsd` | Configured estimate for model generation |
-| `latencyMs` | Phase execution latency |
-| `recordedAt` | Operational clock timestamp |
+| Field                                        | Meaning                                                        |
+| -------------------------------------------- | -------------------------------------------------------------- |
+| `eventId`                                    | Unique event identifier                                        |
+| `runId`                                      | Mastra/account workflow run identifier                         |
+| `tenantId`, `accountId`                      | Reporting scope                                                |
+| `phase`                                      | `assessment` or `approval`                                     |
+| `outcome`                                    | Terminal domain outcome for that phase                         |
+| `riskScore`                                  | Current health score, or null when no assessment exists        |
+| `scoreDelta`                                 | Change from the prior assessment                               |
+| `recommendationCount`                        | Number of proposed plan actions                                |
+| `acceptedRecommendationCount`                | Actions counted as accepted after a successful write           |
+| `approvalDecision`                           | Approved, rejected, or null                                    |
+| `outreachApproved`                           | True only when the approved draft was written                  |
+| `hasHumanFeedback`                           | Whether feedback was supplied, without storing it in the event |
+| `inputTokens`, `outputTokens`, `totalTokens` | Account-level generation usage                                 |
+| `costUsd`                                    | Configured estimate for model generation                       |
+| `latencyMs`                                  | Phase execution latency                                        |
+| `recordedAt`                                 | Operational clock timestamp                                    |
 
 ## Event emission points
 
@@ -147,18 +147,18 @@ fixture clock is pinned.
 The stored fields support the requested operational indicators without parsing
 traces:
 
-| Indicator | Calculation |
-| --- | --- |
-| Risk-score drift | Latest assessment `riskScore` and `scoreDelta` by account |
-| Accepted recommendations | Sum of `acceptedRecommendationCount` |
-| Outreach approvals | Count where `outreachApproved` is true |
-| Approval rate | Approved decisions divided by all decisions |
-| Rejection rate | Rejected decisions divided by all decisions |
-| Human-feedback participation | Count or rate where `hasHumanFeedback` is true |
-| Account cost | Sum `costUsd` by tenant/account |
-| Latency | Average and p95 `latencyMs` |
-| Retry pressure | Assessment attempts ending in `unknown_retry` |
-| Grounding failures | Assessment attempts ending in `grounding_failed` |
+| Indicator                    | Calculation                                               |
+| ---------------------------- | --------------------------------------------------------- |
+| Risk-score drift             | Latest assessment `riskScore` and `scoreDelta` by account |
+| Accepted recommendations     | Sum of `acceptedRecommendationCount`                      |
+| Outreach approvals           | Count where `outreachApproved` is true                    |
+| Approval rate                | Approved decisions divided by all decisions               |
+| Rejection rate               | Rejected decisions divided by all decisions               |
+| Human-feedback participation | Count or rate where `hasHumanFeedback` is true            |
+| Account cost                 | Sum `costUsd` by tenant/account                           |
+| Latency                      | Average and p95 `latencyMs`                               |
+| Retry pressure               | Assessment attempts ending in `unknown_retry`             |
+| Grounding failures           | Assessment attempts ending in `grounding_failed`          |
 
 For production dashboards, export or query `MonitoringStore` events from the
 organization's metrics stack. Keep the domain event schema stable and version

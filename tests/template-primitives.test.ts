@@ -1,42 +1,114 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createFixtureRuntime } from '../src/mastra/adapters/fixture/fixture-runtime.js';
+import { createConnectors } from '../src/mastra/composition/create-connectors.js';
+import { loadConfig } from '../src/mastra/config.js';
 import { LibSqlOperationalStore } from '../src/mastra/memory/operational-stores.js';
 import { buildCustomerSuccessMonitoringReport } from '../src/mastra/monitoring/customer-success-report.js';
 import { approvalRequestSchema } from '../src/mastra/schemas/index.js';
 import { createCrmTools } from '../src/mastra/tools/crm-tools.js';
+import { accountRunInputSchema, approvalResumeSchema } from '../src/mastra/workflows/account-workflow.js';
+import { scheduledInputSchema } from '../src/mastra/workflows/scheduled-workflow.js';
 
 describe('template primitives', () => {
+  it('allows every data source to be replaced independently', () => {
+    const runtime = createFixtureRuntime();
+    const store = new LibSqlOperationalStore(':memory:');
+    try {
+      const connectors = createConnectors(loadConfig({ CRM_PROVIDER: 'fixture', MASTRA_DB_URL: ':memory:' }), store, {
+        usage: runtime.fixtures,
+        support: runtime.fixtures,
+        billing: runtime.fixtures,
+        crm: runtime.fixtures,
+        crmWriter: runtime.writer,
+        clock: runtime.clock,
+      });
+
+      expect(connectors).toMatchObject({
+        usage: runtime.fixtures,
+        support: runtime.fixtures,
+        billing: runtime.fixtures,
+        crm: runtime.fixtures,
+        crmWriter: runtime.writer,
+        clock: runtime.clock,
+      });
+    } finally {
+      store.close();
+    }
+  });
+
   it('registers connector-neutral CRM tools', () => {
     const runtime = createFixtureRuntime();
     const tools = createCrmTools(runtime.fixtures, runtime.writer);
     expect(tools.listCustomerAccounts.id).toBe('list-customer-accounts');
     expect(tools.readCustomerCrmNotes.id).toBe('read-customer-crm-notes');
-    expect(tools.writeApprovedCustomerSuccessDraft.id).toBe(
-      'write-approved-customer-success-draft',
-    );
+    expect(tools.writeApprovedCustomerSuccessDraft.id).toBe('write-approved-customer-success-draft');
     expect(tools.writeApprovedCustomerSuccessDraft.requireApproval).toBe(true);
+  });
+
+  it('exposes source reads, processing, approval, and CRM writes as workflow steps', () => {
+    const runtime = createFixtureRuntime();
+    expect(Object.keys(runtime.accountWorkflow.steps)).toEqual(
+      expect.arrayContaining([
+        'initialize-account-review',
+        'read-product-usage',
+        'read-support-history',
+        'read-billing-status',
+        'read-crm-notes',
+        'assemble-source-snapshot',
+        'assess-account-health',
+        'calculate-risk-drift',
+        'create-account-plan',
+        'draft-personalized-outreach',
+        'bind-approval-artifacts',
+        'record-assessment-monitoring',
+        'request-csm-approval',
+        'validate-approval-freshness',
+        'create-crm-follow-up-tasks',
+        'create-crm-internal-note',
+        'record-approval-monitoring',
+      ]),
+    );
+  });
+
+  it('keeps scheduled, manual, and approval forms free of workflow plumbing', () => {
+    expect(Object.keys(scheduledInputSchema.shape)).toEqual([]);
+    expect(Object.keys(accountRunInputSchema.shape)).toEqual(['accountId']);
+    expect(accountRunInputSchema.parse({})).toEqual({ accountId: '340734348989' });
+    expect(Object.keys(approvalResumeSchema.shape)).toEqual(['decision', 'approverId', 'feedback']);
+  });
+
+  it('runs the at-risk demo account from the Studio schema default', async () => {
+    const runtime = createFixtureRuntime();
+    const run = await runtime.accountWorkflow.createRun({ runId: 'studio-one-click' });
+    const result = await run.start({ inputData: accountRunInputSchema.parse({}) });
+    expect(result.status).toBe('suspended');
+    if (result.status !== 'suspended') return;
+    expect(result.steps['initialize-account-review']).toMatchObject({
+      status: 'success',
+      output: { accountId: '340734348989' },
+    });
+    expect(result.steps['request-csm-approval']?.status).toBe('suspended');
   });
 
   it('uses Mastra step retries before returning unknown_retry', async () => {
     const runtime = createFixtureRuntime();
+    const supportReads = vi.spyOn(runtime.service, 'readSupport');
     const run = await runtime.accountWorkflow.createRun({ runId: 'retry-fixture' });
     const result = await run.start({
       inputData: {
-        runId: 'retry-fixture',
-        tenantId: 'demo-tenant',
         accountId: '340878324429',
-        asOf: runtime.asOf,
       },
     });
     expect(result.status).toBe('success');
     if (result.status !== 'success') return;
     expect(result.result.outcome).toBe('unknown_retry');
-    const attempts = (await runtime.store.listMonitoringEvents()).filter(
-      (event) => event.runId === 'retry-fixture' && event.phase === 'assessment',
+    expect(supportReads).toHaveBeenCalledTimes(3);
+    const events = (await runtime.store.listMonitoringEvents()).filter(
+      event => event.runId === 'retry-fixture' && event.phase === 'assessment',
     );
-    expect(attempts).toHaveLength(3);
+    expect(events).toHaveLength(1);
   });
 
   it('binds approval identity to RequestContext when supplied', async () => {
@@ -44,10 +116,7 @@ describe('template primitives', () => {
     const run = await runtime.accountWorkflow.createRun({ runId: 'context-approval' });
     const suspended = await run.start({
       inputData: {
-        runId: 'context-approval',
-        tenantId: 'demo-tenant',
         accountId: '340734348989',
-        asOf: runtime.asOf,
       },
     });
     expect(suspended.status).toBe('suspended');
@@ -55,7 +124,7 @@ describe('template primitives', () => {
     const requestStep = suspended.steps['request-csm-approval'];
     expect(requestStep?.status).toBe('suspended');
     if (requestStep?.status !== 'suspended') return;
-    const request = approvalRequestSchema.parse(requestStep.suspendPayload);
+    expect(() => approvalRequestSchema.parse(requestStep.suspendPayload)).not.toThrow();
     const context = new RequestContext();
     context.set('csm-id', 'trusted-csm');
     await expect(
@@ -65,10 +134,6 @@ describe('template primitives', () => {
         resumeData: {
           decision: 'approved',
           approverId: 'impersonated-csm',
-          decidedAt: request.requestedAt,
-          expiresAt: request.expiresAt,
-          boundToHash: request.artifactHash,
-          boundToAsOf: request.artifactAsOf,
         },
       }),
     ).resolves.toMatchObject({ status: 'failed' });
@@ -130,8 +195,7 @@ describe('template primitives', () => {
       const persisted = await store.listMonitoringEvents('demo-tenant');
       expect(persisted).toEqual([first, second]);
       expect(
-        buildCustomerSuccessMonitoringReport('demo-tenant', persisted, runtime.asOf)
-          .accounts[0]?.latestRiskScore,
+        buildCustomerSuccessMonitoringReport('demo-tenant', persisted, runtime.asOf).accounts[0]?.latestRiskScore,
       ).toBe(20);
     } finally {
       store.close();
