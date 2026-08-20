@@ -65,7 +65,7 @@ function evidenceLabel(evidence: Evidence): string {
 
 function evidenceNarrative(evidence: readonly Evidence[]): string {
   if (evidence.length === 2 && evidence.every(item => item.ref.fieldPath === 'adoptionRate')) {
-    return `Product adoption changed from ${formatEvidenceValue(evidence[0]!)} to ${formatEvidenceValue(evidence[1]!)} during the review window.`;
+    return `Product adoption readings during the review window are ${formatEvidenceValue(evidence[0]!)} and ${formatEvidenceValue(evidence[1]!)}.`;
   }
   const statements = evidence.map(item => `${evidenceLabel(item)} is ${formatEvidenceValue(item)}`);
   const narrative = statements.join('; ');

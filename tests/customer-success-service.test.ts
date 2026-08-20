@@ -37,7 +37,7 @@ describe('customer success service', () => {
           'Resolve the verified billing risk',
           'Review the verified relationship signal',
         ]);
-        expect(result.outreach?.body).toContain('Product adoption changed from 72% to 31%');
+        expect(result.outreach?.body).toContain('Product adoption readings during the review window are 72% and 31%');
         expect(result.outreach?.body).not.toContain('usage.adoptionRate');
       }
     }
