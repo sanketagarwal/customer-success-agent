@@ -111,6 +111,33 @@ describe('template primitives', () => {
     expect(events).toHaveLength(1);
   });
 
+  it('retries each model-backed generation stage independently', async () => {
+    const runtime = createFixtureRuntime();
+    const originalAssess = runtime.service.assessHealth.bind(runtime.service);
+    const originalPlan = runtime.service.createPlan.bind(runtime.service);
+    const originalDraft = runtime.service.draftOutreach.bind(runtime.service);
+    const assess = vi
+      .spyOn(runtime.service, 'assessHealth')
+      .mockRejectedValueOnce(new Error('transient assessment failure'))
+      .mockImplementation(originalAssess);
+    const plan = vi
+      .spyOn(runtime.service, 'createPlan')
+      .mockRejectedValueOnce(new Error('transient planning failure'))
+      .mockImplementation(originalPlan);
+    const draft = vi
+      .spyOn(runtime.service, 'draftOutreach')
+      .mockRejectedValueOnce(new Error('transient outreach failure'))
+      .mockImplementation(originalDraft);
+
+    const run = await runtime.accountWorkflow.createRun({ runId: 'generation-retries' });
+    const result = await run.start({ inputData: { accountId: '340734348989' } });
+
+    expect(result.status).toBe('suspended');
+    expect(assess).toHaveBeenCalledTimes(2);
+    expect(plan).toHaveBeenCalledTimes(2);
+    expect(draft).toHaveBeenCalledTimes(2);
+  });
+
   it('binds approval identity to RequestContext when supplied', async () => {
     const runtime = createFixtureRuntime();
     const run = await runtime.accountWorkflow.createRun({ runId: 'context-approval' });

@@ -79,6 +79,12 @@ HUBSPOT_PRIVATE_APP_TOKEN=your-private-app-token
 Approved HubSpot runs create internal notes and follow-up tasks; they do not
 send the outreach draft.
 
+HubSpot replaces only the CRM read/write connector in this example. The bundled
+usage, support, and billing fixtures are keyed by account ID, so add the HubSpot
+company ID to those fixtures or replace those connectors before running a live
+company. Without that alignment, the workflow correctly returns
+`insufficient_data`.
+
 ## Making it yours
 
 - Connect your product analytics, support, billing, and CRM providers in

@@ -46,7 +46,7 @@ const reviewInitializationSchema = z.object({
   accountId: z.string().min(1),
   asOf: z.iso.datetime({ offset: true }),
   window: timeWindowSchema,
-  startedAt: z.number().nonnegative(),
+  startedAtMs: z.number().int().nonnegative(),
 });
 
 const usageReadSchema = reviewInitializationSchema.extend({
@@ -83,7 +83,7 @@ const reviewPipelineSchema = z.object({
 const approvalStepOutputSchema = z.object({
   prepared: preparedRunSchema,
   decision: approvalDecisionSchema.nullable(),
-  startedAt: z.number().nonnegative(),
+  startedAtMs: z.number().int().nonnegative(),
 });
 
 const approvalValidationSchema = z.object({
@@ -91,7 +91,7 @@ const approvalValidationSchema = z.object({
   decision: approvalDecisionSchema.nullable(),
   run: preparedRunSchema,
   writeInput: crmWriteInputSchema.nullable(),
-  startedAt: z.number().nonnegative(),
+  startedAtMs: z.number().int().nonnegative(),
 });
 
 const taskWriteStageSchema = approvalValidationSchema.extend({
@@ -155,7 +155,7 @@ export function createAccountWorkflow(composition: AccountWorkflowDependencies) 
       return {
         ...normalized,
         window: assessmentWindow(normalized.asOf),
-        startedAt: performance.now(),
+        startedAtMs: Date.now(),
       };
     },
   });
@@ -246,6 +246,7 @@ export function createAccountWorkflow(composition: AccountWorkflowDependencies) 
     description: 'Create and ground the structured health assessment and risk factors.',
     inputSchema: reviewPipelineSchema,
     outputSchema: reviewPipelineSchema,
+    retries: 2,
     execute: async ({ inputData }) => {
       if (inputData.terminal) return inputData;
       const assessed = await composition.service.assessHealth(inputData.initialization, inputData.snapshot);
@@ -284,6 +285,7 @@ export function createAccountWorkflow(composition: AccountWorkflowDependencies) 
     description: 'Create a grounded owner, priority, and due-date account plan for verified risks.',
     inputSchema: reviewPipelineSchema,
     outputSchema: reviewPipelineSchema,
+    retries: 2,
     execute: async ({ inputData }) => {
       if (inputData.terminal || !inputData.assessment || !inputData.drift) return inputData;
       const planned = await composition.service.createPlan(
@@ -301,6 +303,7 @@ export function createAccountWorkflow(composition: AccountWorkflowDependencies) 
     description: 'Draft evidence-backed customer outreach without sending it.',
     inputSchema: reviewPipelineSchema,
     outputSchema: reviewPipelineSchema,
+    retries: 2,
     execute: async ({ inputData }) => {
       if (inputData.terminal || !inputData.assessment || !inputData.drift || !inputData.plan) return inputData;
       const drafted = await composition.service.draftOutreach(
@@ -346,7 +349,7 @@ export function createAccountWorkflow(composition: AccountWorkflowDependencies) 
       await composition.service.recordAssessmentMonitoring(
         inputData.initialization,
         inputData.terminal,
-        performance.now() - inputData.initialization.startedAt,
+        Math.max(0, Date.now() - inputData.initialization.startedAtMs),
       );
       return inputData.terminal;
     },
@@ -361,7 +364,7 @@ export function createAccountWorkflow(composition: AccountWorkflowDependencies) 
     suspendSchema: approvalRequestSchema,
     execute: async ({ inputData, resumeData, suspend, requestContext }) => {
       if (inputData.outcome !== 'awaiting_approval') {
-        return { prepared: inputData, decision: null, startedAt: performance.now() };
+        return { prepared: inputData, decision: null, startedAtMs: Date.now() };
       }
       const request = await composition.operationalStore.getRequest(inputData.runId);
       if (!request) throw new Error(`Approval request ${inputData.runId} was not persisted`);
@@ -379,7 +382,7 @@ export function createAccountWorkflow(composition: AccountWorkflowDependencies) 
         boundToHash: request.artifactHash,
         boundToAsOf: request.artifactAsOf,
       });
-      return { prepared: inputData, decision, startedAt: performance.now() };
+      return { prepared: inputData, decision, startedAtMs: Date.now() };
     },
   });
 
@@ -443,7 +446,7 @@ export function createAccountWorkflow(composition: AccountWorkflowDependencies) 
           inputData.prepared,
           inputData.decision,
           inputData.run,
-          performance.now() - inputData.startedAt,
+          Math.max(0, Date.now() - inputData.startedAtMs),
         );
       }
       return {
