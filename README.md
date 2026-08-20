@@ -19,14 +19,19 @@ systems. An OpenAI model generates the assessment, plan, and outreach.
 
 - Node.js 22.13 or newer
 - An OpenAI API key
+- Access to this GitHub repository
 
 ## Quickstart 🚀
 
 ```bash
-npx create-mastra@latest customer-success-agent --template customer-success-agent
+gh repo clone sanketagarwal/customer-success-agent
 cd customer-success-agent
 cp .env.example .env
+npm install
 ```
+
+After this template is published in Mastra's catalog, it can be installed with
+`create-mastra --template customer-success-agent` instead.
 
 Add `OPENAI_API_KEY` to `.env`, then start Mastra Studio:
 
