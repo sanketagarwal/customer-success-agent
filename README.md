@@ -23,7 +23,7 @@ systems. An OpenAI model generates the assessment, plan, and outreach.
 ## Quickstart 🚀
 
 ```bash
-npx create-mastra@latest --template customer-success-agent
+npx create-mastra@latest customer-success-agent --template customer-success-agent
 cd customer-success-agent
 cp .env.example .env
 ```
@@ -56,8 +56,10 @@ implement the interfaces in `src/mastra/ports/index.ts` and connect them in
 `src/mastra/composition/create-connectors.ts`. Product usage, support, billing,
 CRM reads, and CRM writes can be replaced independently.
 
-HubSpot is included as an optional example CRM adapter, but the workflow is not
-tied to HubSpot.
+HubSpot is included as an optional CRM adapter. Set `CRM_PROVIDER=hubspot` and
+`HUBSPOT_PRIVATE_APP_TOKEN` to enable it. This replaces only CRM reads and
+writes; the HubSpot company ID must match the remaining fixtures, or you must
+replace the usage, support, and billing connectors too.
 
 ## Making it yours
 
