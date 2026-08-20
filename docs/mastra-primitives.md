@@ -121,9 +121,10 @@ when `GENERATION_MODE=model`.
 - Assessment, planning, and outreach use separate memory thread IDs while
   sharing the same account resource scope.
 
-The default fixture mode uses deterministic intelligence and does not require a
-model API key. The workflow, grounding, approval, monitoring, and CRM contracts
-are the same in both modes.
+The Studio workflow uses model-backed intelligence by default. Fixture scripts
+and CI use deterministic intelligence so automated verification remains
+repeatable and does not require repository secrets. The workflow, grounding,
+approval, monitoring, and CRM contracts are the same in both modes.
 
 ## Working memory
 
@@ -279,10 +280,11 @@ documented in [Monitoring](./monitoring.md).
 
 ## Composition and connector replacement
 
-`src/mastra/composition/create-composition.ts` is the composition root. It
-chooses fixture or HubSpot CRM adapters, deterministic or model intelligence,
-storage, vector storage, memory, tools, and the orchestration service from
-validated environment configuration.
+`src/mastra/composition/create-composition.ts` is the composition root. The
+adjacent `create-connectors.ts` selects fixture or HubSpot CRM adapters and is
+the replacement point for other data providers. The composition root selects
+model intelligence, storage, vector storage, memory, tools, and the
+orchestration service from validated environment configuration.
 
 To add a provider, implement the relevant interfaces from
 `src/mastra/ports/index.ts` and replace the binding in the composition root.

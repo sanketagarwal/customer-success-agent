@@ -18,7 +18,7 @@ const configSchema = z.object({
   CUSTOMER_SUCCESS_CRON: z.string().default('0 9 * * 1'),
   CUSTOMER_SUCCESS_TIMEZONE: z.string().default('UTC'),
   MAX_ACCOUNT_CONCURRENCY: z.coerce.number().int().min(1).max(25).default(4),
-  GENERATION_MODE: z.enum(['deterministic', 'model']).default('deterministic'),
+  GENERATION_MODE: z.enum(['deterministic', 'model']).default('model'),
   MODEL: z.string().min(1).default('openai/gpt-5-mini'),
   MODEL_INPUT_COST_PER_MILLION: z.coerce.number().nonnegative().default(0),
   MODEL_OUTPUT_COST_PER_MILLION: z.coerce.number().nonnegative().default(0),

@@ -12,6 +12,10 @@ import { accountRunInputSchema, approvalResumeSchema } from '../src/mastra/workf
 import { scheduledInputSchema } from '../src/mastra/workflows/scheduled-workflow.js';
 
 describe('template primitives', () => {
+  it('uses model-backed generation for the Studio runtime by default', () => {
+    expect(loadConfig({}).generationMode).toBe('model');
+  });
+
   it('allows every data source to be replaced independently', () => {
     const runtime = createFixtureRuntime();
     const store = new LibSqlOperationalStore(':memory:');
