@@ -70,4 +70,14 @@ describe('structured review', () => {
     const source = await collectAccountData(connectors, 'customer-tenant', '340734348989', window);
     expect(source).toMatchObject({ tenantId: 'customer-tenant', usage: { status: 'available' }, billing: { status: 'available' } });
   });
+
+  it('compares offset timestamps by instant', async () => {
+    const source = await collectAccountData(
+      new FixtureConnector(resolve('data/fixtures/accounts.json')),
+      'demo-tenant',
+      '340737895140',
+      { start: '2026-08-17T08:30:00.000Z', end: '2026-08-17T11:00:00.000Z' },
+    );
+    expect(source.usage).toEqual({ status: 'empty' });
+  });
 });

@@ -44,7 +44,10 @@ const fixtureSchema = z.object({
   accounts: z.array(accountSchema),
   snapshots: z.record(z.string(), snapshotSchema.pick({ usage: true, support: true, billing: true, crm: true })),
 });
-const inWindow = (date: string, { start, end }: TimeWindow) => date >= start && date <= end;
+const inWindow = (date: string, { start, end }: TimeWindow) => {
+  const time = Date.parse(date);
+  return time >= Date.parse(start) && time <= Date.parse(end);
+};
 const id = (prefix: string, value: string) =>
   `${prefix}-${createHash('sha256').update(value).digest('hex').slice(0, 12)}`;
 

@@ -39,9 +39,14 @@ export const accountPlanQualityScorer = createScorer<Review['assessment'], Revie
 export const personalizationScorer = createScorer<Review['assessment'], Review['outreach']>({
   id: 'outreach-personalization',
   description: 'Checks that outreach contains grounded account signals.',
-}).generateScore(({ run }) => Number(
-  run.input && (run.input.risks.length === 0 || (run.output.claims.length > 0 && run.output.body.length > 80)),
-));
+}).generateScore(({ run }) => {
+  if (!run.input) return 0;
+  const claims = refs(run.output.claims);
+  return Number(
+    run.input.risks.length === 0
+    || (run.output.body.length > 80 && run.input.risks.every(risk => risk.evidence.some(item => claims.has(hash(item))))),
+  );
+});
 
 export const actionRelevanceScorer = createScorer<Review['assessment'], Review['plan']>({
   id: 'action-relevance',
@@ -49,5 +54,8 @@ export const actionRelevanceScorer = createScorer<Review['assessment'], Review['
 }).generateScore(({ run }) => {
   if (!run.input) return 0;
   const evidence = refs(run.input.risks);
-  return Number(run.output.actions.every(action => action.evidence.some(item => evidence.has(hash(item)))));
+  return Number(
+    (run.input.risks.length === 0 || run.output.actions.length > 0)
+    && run.output.actions.every(action => action.evidence.some(item => evidence.has(hash(item)))),
+  );
 });
