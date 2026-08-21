@@ -19,12 +19,16 @@ import {
   reviewSchema,
   windowSchema,
 } from './schemas.js';
-import { LibSqlState, type CustomerSuccessState } from './state.js';
+import { LibSqlState, type CustomerSuccessState, type WriteIntentStore } from './state.js';
 import { createAccountWorkflow, createScheduledWorkflow } from './workflows.js';
 
 export function createRuntime(
   config: AppConfig,
-  overrides: { connectors?: Partial<CustomerSuccessConnectors>; reviewer?: Reviewer; state?: CustomerSuccessState } = {},
+  overrides: {
+    connectors?: Partial<CustomerSuccessConnectors>;
+    reviewer?: Reviewer;
+    state?: CustomerSuccessState & WriteIntentStore;
+  } = {},
 ) {
   const storage = new LibSQLStore({
     id: 'customer-success-storage',
@@ -44,8 +48,8 @@ export function createRuntime(
     ...(vector ? { vector, embedder: new ModelRouterEmbeddingModel(config.embeddingModel) } : {}),
     observationalMemory: config.observationalMemory,
   });
-  const connectors = createConnectors(config, overrides.connectors);
   const state = overrides.state ?? new LibSqlState(config.databaseUrl, config.tursoAuthToken);
+  const connectors = createConnectors(config, state, overrides.connectors);
   const reviewer = overrides.reviewer ?? (config.generationMode === 'fixture'
     ? new FixtureReviewer()
     : new ModelReviewer(agent, config.modelInputCostPerMillion, config.modelOutputCostPerMillion));
@@ -57,7 +61,7 @@ export function createRuntime(
     now: () => config.crmProvider === 'fixture' ? new Date(config.fixtureNow) : new Date(),
   };
   const accountWorkflow = createAccountWorkflow(dependencies);
-  const scheduledWorkflow = createScheduledWorkflow(dependencies, accountWorkflow);
+  const scheduledWorkflow = createScheduledWorkflow(dependencies);
 
   const tools = {
     listCustomerAccounts: createTool({

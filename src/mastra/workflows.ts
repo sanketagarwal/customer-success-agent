@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import { RequestContext } from '@mastra/core/request-context';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
@@ -15,6 +14,7 @@ import {
   snapshotSchema,
   workflowOutputSchema,
   type MonitoringEvent,
+  type Snapshot,
   type WorkflowOutput,
 } from './schemas.js';
 import type { CustomerSuccessState } from './state.js';
@@ -56,8 +56,8 @@ const approvalRequestSchema = z.object({
   expiresAt: z.string(),
 });
 
-interface Dependencies {
-  config: Pick<AppConfig, 'tenantId' | 'cron' | 'timezone'>;
+export interface WorkflowDependencies {
+  config: Pick<AppConfig, 'tenantId' | 'cron' | 'timezone' | 'maxAccountConcurrency'>;
   connectors: CustomerSuccessConnectors;
   reviewer: Reviewer;
   state: CustomerSuccessState;
@@ -129,7 +129,48 @@ function event(
   };
 }
 
-export function createAccountWorkflow(dependencies: Dependencies) {
+function initialState(dependencies: WorkflowDependencies, accountId: string, runId: string, snapshot: Snapshot) {
+  return stateSchema.parse({
+    runId,
+    tenantId: dependencies.config.tenantId,
+    accountId,
+    asOf: snapshot.window.end,
+    startedAt: Date.now(),
+    snapshot,
+    review: null,
+    outcome: null,
+    message: '',
+    approval: null,
+    usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+    crm: null,
+  });
+}
+
+async function analyzeAccount(input: z.infer<typeof stateSchema>, dependencies: WorkflowDependencies) {
+  const results = [input.snapshot.usage, input.snapshot.support, input.snapshot.billing, input.snapshot.crm];
+  let next = input;
+  if (results.some(result => result.status === 'unavailable')) {
+    next = { ...next, outcome: 'unknown_retry' as const, message: 'A source remained unavailable after retries.' };
+  } else if (results.filter(result => result.status === 'available').length < 2) {
+    next = { ...next, outcome: 'insufficient_data' as const, message: 'At least two data sources are required.' };
+  } else {
+    const previous = await dependencies.state.getReview(input.tenantId, input.accountId);
+    const prepared = await prepareReview(input.snapshot, dependencies.reviewer, previous);
+    next = { ...next, review: prepared.review, usage: prepared.usage };
+    if (prepared.errors.length) {
+      next = { ...next, outcome: 'grounding_failed' as const, message: `Unsupported evidence: ${prepared.errors.join(', ')}` };
+    } else if (prepared.review.assessment.status === 'healthy') {
+      next = { ...next, outcome: 'no_action' as const, message: 'Account is healthy; no follow-up is needed.' };
+    } else {
+      next = { ...next, outcome: 'awaiting_approval' as const, message: 'Review is ready for CSM approval.' };
+    }
+    await dependencies.state.saveReview(prepared.review);
+  }
+  await dependencies.state.record(event(next, 'review', next.usage));
+  return next;
+}
+
+export function createAccountWorkflow(dependencies: WorkflowDependencies) {
   const collect = createStep({
     id: 'collect-account-data',
     description: 'Read product usage, support, billing, and CRM notes in parallel.',
@@ -152,20 +193,7 @@ export function createAccountWorkflow(dependencies: Dependencies) {
       const unavailable = [snapshot.usage, snapshot.support, snapshot.billing, snapshot.crm]
         .some(result => result.status === 'unavailable');
       if (unavailable && retryCount < 2) throw new Error('A source is temporarily unavailable');
-      return {
-        runId,
-        tenantId,
-        accountId: inputData.accountId,
-        asOf,
-        startedAt: Date.now(),
-        snapshot,
-        review: null,
-        outcome: null,
-        message: '',
-        approval: null,
-        usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
-        crm: null,
-      };
+      return initialState(dependencies, inputData.accountId, runId, snapshot);
     },
   });
 
@@ -175,29 +203,7 @@ export function createAccountWorkflow(dependencies: Dependencies) {
     inputSchema: stateSchema,
     outputSchema: stateSchema,
     retries: 2,
-    execute: async ({ inputData }) => {
-      const results = [inputData.snapshot.usage, inputData.snapshot.support, inputData.snapshot.billing, inputData.snapshot.crm];
-      let next = inputData;
-      if (results.some(result => result.status === 'unavailable')) {
-        next = { ...next, outcome: 'unknown_retry' as const, message: 'A source remained unavailable after retries.' };
-      } else if (results.filter(result => result.status === 'available').length < 2) {
-        next = { ...next, outcome: 'insufficient_data' as const, message: 'At least two data sources are required.' };
-      } else {
-        const previous = await dependencies.state.getReview(inputData.tenantId, inputData.accountId);
-        const prepared = await prepareReview(inputData.snapshot, dependencies.reviewer, previous);
-        next = { ...next, review: prepared.review, usage: prepared.usage };
-        if (prepared.errors.length) {
-          next = { ...next, outcome: 'grounding_failed' as const, message: `Unsupported evidence: ${prepared.errors.join(', ')}` };
-        } else if (prepared.review.assessment.status === 'healthy') {
-          next = { ...next, outcome: 'no_action' as const, message: 'Account is healthy; no follow-up is needed.' };
-        } else {
-          next = { ...next, outcome: 'awaiting_approval' as const, message: 'Review is ready for CSM approval.' };
-        }
-        await dependencies.state.saveReview(prepared.review);
-      }
-      await dependencies.state.record(event(next, 'review', next.usage));
-      return next;
-    },
+    execute: ({ inputData }) => analyzeAccount(inputData, dependencies),
   });
 
   const approve = createStep({
@@ -275,33 +281,66 @@ export function createAccountWorkflow(dependencies: Dependencies) {
 
 const scheduledOutputSchema = z.object({
   total: z.number(),
-  results: z.array(z.object({ accountId: z.string(), runId: z.string(), outcome: z.string() })),
+  results: z.array(z.object({
+    accountId: z.string(),
+    runId: z.string(),
+    outcome: z.string(),
+    error: z.string().nullable(),
+  })),
 });
 
-export function createScheduledWorkflow(dependencies: Dependencies, accountWorkflow: ReturnType<typeof createAccountWorkflow>) {
+async function mapConcurrent<T, R>(values: readonly T[], limit: number, worker: (value: T) => Promise<R>) {
+  const results = new Array<R>(values.length);
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, values.length) }, async () => {
+    while (cursor < values.length) {
+      const index = cursor++;
+      const value = values[index];
+      if (value !== undefined) results[index] = await worker(value);
+    }
+  }));
+  return results;
+}
+
+export async function executeScheduledReviews(dependencies: WorkflowDependencies) {
+  const accounts = await dependencies.connectors.listAccounts(dependencies.config.tenantId);
+  const results = await mapConcurrent(accounts, dependencies.config.maxAccountConcurrency, async account => {
+    const runId = `scheduled-${account.accountId}-${randomUUID()}`;
+    try {
+      const asOf = dependencies.now().toISOString();
+      let snapshot: Snapshot | undefined;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        snapshot = await collectAccountData(
+          dependencies.connectors,
+          dependencies.config.tenantId,
+          account.accountId,
+          assessmentWindow(asOf),
+        );
+        if (![snapshot.usage, snapshot.support, snapshot.billing, snapshot.crm]
+          .some(result => result.status === 'unavailable')) break;
+      }
+      const result = await analyzeAccount(initialState(dependencies, account.accountId, runId, snapshot!), dependencies);
+      return { accountId: account.accountId, runId, outcome: result.outcome ?? 'failed', error: null };
+    } catch (error) {
+      return {
+        accountId: account.accountId,
+        runId,
+        outcome: 'failed',
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+  return { total: results.length, results };
+}
+
+export function createScheduledWorkflow(dependencies: WorkflowDependencies) {
   const reviewAccounts = createStep({
     id: 'review-all-accounts',
-    description: 'Run the customer-success workflow for every CRM account.',
+    description: 'Prepare an isolated customer-success review for every CRM account.',
     inputSchema: z.object({}),
     outputSchema: scheduledOutputSchema,
     retries: 2,
-    execute: async () => {
-      const accounts = await dependencies.connectors.listAccounts(dependencies.config.tenantId);
-      const results = await Promise.all(accounts.map(async account => {
-        const runId = `scheduled-${account.accountId}-${randomUUID()}`;
-        const run = await accountWorkflow.createRun({ runId });
-        const requestContext = new RequestContext();
-        requestContext.set('tenant-id', account.tenantId);
-        requestContext.set('account-id', account.accountId);
-        const result = await run.start({ inputData: { accountId: account.accountId }, requestContext });
-        return {
-          accountId: account.accountId,
-          runId,
-          outcome: result.status === 'success' ? result.result.outcome : result.status === 'suspended' ? 'awaiting_approval' : 'failed',
-        };
-      }));
-      return { total: results.length, results };
-    },
+    execute: () => executeScheduledReviews(dependencies),
   });
 
   return createWorkflow({

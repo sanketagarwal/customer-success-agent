@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createFixtureRuntime } from '../src/mastra/runtime.js';
 import { monitoringSummary } from '../src/mastra/state.js';
-import { accountInputSchema, approvalSchema } from '../src/mastra/workflows.js';
+import { accountInputSchema, approvalSchema, executeScheduledReviews } from '../src/mastra/workflows.js';
 
 const runtimes: Awaited<ReturnType<typeof createFixtureRuntime>>[] = [];
 const runtime = async () => {
@@ -118,5 +118,27 @@ describe('customer-success workflow', () => {
     const store = await second.mastra.getStorage()?.getStore('workflows');
     await expect(store?.loadWorkflowSnapshot({ workflowName: 'customer-success-account', runId: 'isolated-run' }))
       .resolves.toBeNull();
+  });
+
+  it('isolates failures in the scheduled account batch', async () => {
+    const app = await runtime();
+    const original = app.reviewer.review.bind(app.reviewer);
+    vi.spyOn(app.reviewer, 'review').mockImplementation(snapshot => {
+      if (snapshot.accountId === '340739743463') throw new Error('isolated account failure');
+      return original(snapshot);
+    });
+    const result = await executeScheduledReviews({
+      config: app.config,
+      connectors: app.connectors,
+      reviewer: app.reviewer,
+      state: app.state,
+      now: () => new Date(app.config.fixtureNow),
+    });
+    expect(result.total).toBe(4);
+    expect(result.results.find(item => item.accountId === '340739743463')).toMatchObject({
+      outcome: 'failed',
+      error: 'isolated account failure',
+    });
+    expect(result.results.filter(item => item.outcome !== 'failed')).toHaveLength(3);
   });
 });

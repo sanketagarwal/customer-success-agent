@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { FixtureConnector } from '../src/mastra/connectors.js';
-import { groundingErrors, prepareReview } from '../src/mastra/customer-success.js';
+import { canonicalReview, groundingErrors, prepareReview } from '../src/mastra/customer-success.js';
 import { FixtureReviewer, redactSnapshot } from '../src/mastra/reviewer.js';
 import { MemoryState } from '../src/mastra/state.js';
 import { collectAccountData } from '../src/mastra/workflows.js';
@@ -33,6 +33,16 @@ describe('structured review', () => {
     expect(groundingErrors(unsupported, source)).toContain('riskFactors[0].evidence[0]');
   });
 
+  it('rejects risky reviews with missing plan or outreach coverage', async () => {
+    const source = await snapshot();
+    const generated = await new FixtureReviewer().review(source);
+    generated.review.plan.actions = [];
+    generated.review.outreach.claims = [];
+    const errors = groundingErrors(canonicalReview(generated.review, source, null), source);
+    expect(errors).toContain('riskFactors[0].planCoverage');
+    expect(errors).toContain('riskFactors[0].outreachCoverage');
+  });
+
   it('calculates drift from account-scoped state', async () => {
     const source = await snapshot();
     const reviewer = new FixtureReviewer();
@@ -53,5 +63,12 @@ describe('structured review', () => {
     if (redacted.support.status !== 'available' || redacted.crm.status !== 'available') throw new Error('fixture missing');
     expect(redacted.support.data.tickets[0]?.subject).toBe('[REDACTED]');
     expect(redacted.crm.data.notes[0]).toMatchObject({ authorId: null, body: '[REDACTED]' });
+  });
+
+  it('maps bundled fixture data into a custom runtime tenant', async () => {
+    const connectors = new FixtureConnector(resolve('data/fixtures/accounts.json'), 'demo-tenant');
+    const source = await collectAccountData(connectors, 'customer-tenant', '340734348989', window);
+    expect(source.usage).toMatchObject({ status: 'available', data: { tenantId: 'customer-tenant' } });
+    expect(source.billing).toMatchObject({ status: 'available', data: { tenantId: 'customer-tenant' } });
   });
 });

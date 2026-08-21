@@ -38,6 +38,8 @@ The workflow has four steps:
 
 Approve as `demo-csm`. The completed run output contains the fixture CRM note and task IDs. Nothing is sent to a customer automatically.
 
+`weekly-customer-success` performs the same risk review across the CRM account list on schedule. Risky accounts are returned as `awaiting_approval`; run the account workflow to review and approve one.
+
 ## HubSpot demo
 
 To write the approved note and tasks to HubSpot, update `.env`:

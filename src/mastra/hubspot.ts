@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import type { CrmWriteInput, CustomerSuccessConnectors, Query } from './connectors.js';
 import { accountSchema, crmWriteSchema, notesResultSchema } from './schemas.js';
+import type { WriteIntentStore } from './state.js';
 
 const objectSchema = z.object({
   id: z.union([z.string(), z.number()]).transform(String),
@@ -22,6 +23,7 @@ interface Options {
   token: string;
   baseUrl: string;
   renewalProperty: string;
+  writes: WriteIntentStore;
   fetch?: typeof globalThis.fetch;
 }
 
@@ -154,10 +156,11 @@ export class HubSpotConnector
     const associationTypeId = await this.getTaskAssociationType();
     const taskIds = await Promise.all(
       input.review.plan.actions.map(async action => {
-        const existing = existingTasks.get(action.id);
-        if (existing) return existing;
-        const task = objectSchema.parse(
-          await this.request('/crm/v3/objects/tasks', {
+        const key = `${marker}:task:${action.id}`;
+        const result = await this.writeOnce(
+          key,
+          existingTasks.get(action.id),
+          async () => objectSchema.parse(await this.request('/crm/v3/objects/tasks', {
             method: 'POST',
             body: JSON.stringify({
               properties: {
@@ -173,13 +176,14 @@ export class HubSpotConnector
                 types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId }],
               }],
             }),
-          }, false),
+          }, false)).id,
+          async () => (await this.readAssociated(input.accountId, 'tasks', ['hs_task_body']))
+            .find(task => task.properties.hs_task_body?.includes(`${marker}[action:${action.id}]`))?.id,
         );
-        return task.id;
+        return result.id;
       }),
     );
 
-    if (existingNote) return crmWriteSchema.parse({ noteId: existingNote.id, taskIds, created: false });
     const { assessment, plan, outreach } = input.review;
     const body = [
       '<strong>Customer Success review — internal only</strong>',
@@ -192,19 +196,60 @@ export class HubSpotConnector
       `<p>${escapeHtml(outreach.subject)}</p>`,
       `<p>${escapeHtml(outreach.body)}</p>`,
     ].join('\n');
-    const note = objectSchema.parse(
-      await this.request('/crm/v3/objects/notes', {
-        method: 'POST',
-        body: JSON.stringify({
-          properties: { hs_timestamp: new Date().toISOString(), hs_note_body: body },
-          associations: [{
-            to: { id: input.accountId },
-            types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 190 }],
-          }],
-        }),
-      }, false),
+    const note = await this.writeOnce(
+      `${marker}:note`,
+      existingNote?.id,
+      async () => objectSchema.parse(await this.request('/crm/v3/objects/notes', {
+          method: 'POST',
+          body: JSON.stringify({
+            properties: { hs_timestamp: new Date().toISOString(), hs_note_body: body },
+            associations: [{
+              to: { id: input.accountId },
+              types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 190 }],
+            }],
+          }),
+        }, false)).id,
+      async () => (await this.readAssociated(input.accountId, 'notes', ['hs_note_body']))
+        .find(value => value.properties.hs_note_body?.includes(marker))?.id,
     );
-    return crmWriteSchema.parse({ noteId: note.id, taskIds, created: true });
+    return crmWriteSchema.parse({ noteId: note.id, taskIds, created: note.created });
+  }
+
+  private async writeOnce(
+    key: string,
+    existingId: string | undefined,
+    create: () => Promise<string>,
+    reconcile: () => Promise<string | undefined>,
+  ) {
+    if (existingId) {
+      await this.options.writes.completeWrite(key, existingId);
+      return { id: existingId, created: false };
+    }
+    if (!await this.options.writes.claimWrite(key)) {
+      const intent = await this.options.writes.getWrite(key);
+      if (intent?.status === 'complete' && intent.remoteId) return { id: intent.remoteId, created: false };
+      const recovered = await reconcile();
+      if (recovered) {
+        await this.options.writes.completeWrite(key, recovered);
+        return { id: recovered, created: false };
+      }
+      throw new Error(`HubSpot write is pending for ${key}`);
+    }
+    try {
+      const id = await create();
+      await this.options.writes.completeWrite(key, id);
+      return { id, created: true };
+    } catch (error) {
+      const recovered = await reconcile();
+      if (recovered) {
+        await this.options.writes.completeWrite(key, recovered);
+        return { id: recovered, created: true };
+      }
+      if (error instanceof Error && /^HubSpot 4(?!29)/.test(error.message)) {
+        await this.options.writes.releaseWrite(key);
+      }
+      throw error;
+    }
   }
 
   private async readAssociated(companyId: string, type: 'notes' | 'tasks', properties: string[]) {

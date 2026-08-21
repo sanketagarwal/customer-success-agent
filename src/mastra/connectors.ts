@@ -5,8 +5,10 @@ import { z } from 'zod';
 
 import type { AppConfig } from './config.js';
 import { HubSpotConnector } from './hubspot.js';
+import type { WriteIntentStore } from './state.js';
 import {
   accountSchema,
+  billingResultSchema,
   crmWriteSchema,
   notesResultSchema,
   snapshotSchema,
@@ -60,7 +62,10 @@ export class FixtureConnector implements CustomerSuccessConnectors {
   private book?: Promise<z.infer<typeof fixtureBookSchema>>;
   private readonly writes = new Map<string, CrmWrite>();
 
-  constructor(private readonly path: string) {}
+  constructor(
+    private readonly path: string,
+    private readonly sourceTenantId = 'demo-tenant',
+  ) {}
 
   private load() {
     this.book ??= readFile(this.path, 'utf8').then(value => fixtureBookSchema.parse(JSON.parse(value)));
@@ -69,11 +74,13 @@ export class FixtureConnector implements CustomerSuccessConnectors {
 
   private async snapshot(query: Query) {
     const snapshot = (await this.load()).snapshots[query.accountId];
-    return snapshot?.tenantId === query.tenantId ? snapshot : null;
+    return snapshot?.tenantId === this.sourceTenantId ? snapshot : null;
   }
 
   async listAccounts(tenantId: string) {
-    return (await this.load()).accounts.filter(account => account.tenantId === tenantId);
+    return (await this.load()).accounts
+      .filter(account => account.tenantId === this.sourceTenantId)
+      .map(account => ({ ...account, tenantId }));
   }
 
   async readUsage(query: Query) {
@@ -82,7 +89,10 @@ export class FixtureConnector implements CustomerSuccessConnectors {
     if (result.status === 'unavailable') return result;
     const points = result.data.points.filter(point => inWindow(point.timestamp, query.window));
     return points.length
-      ? usageResultSchema.parse({ status: 'available', data: { ...result.data, window: query.window, points } })
+      ? usageResultSchema.parse({
+          status: 'available',
+          data: { ...result.data, tenantId: query.tenantId, accountId: query.accountId, window: query.window, points },
+        })
       : { status: 'empty' as const };
   }
 
@@ -92,7 +102,10 @@ export class FixtureConnector implements CustomerSuccessConnectors {
     if (result.status === 'unavailable') return result;
     const tickets = result.data.tickets.filter(ticket => inWindow(ticket.createdAt, query.window));
     return tickets.length
-      ? supportResultSchema.parse({ status: 'available', data: { ...result.data, window: query.window, tickets } })
+      ? supportResultSchema.parse({
+          status: 'available',
+          data: { ...result.data, tenantId: query.tenantId, accountId: query.accountId, window: query.window, tickets },
+        })
       : { status: 'empty' as const };
   }
 
@@ -100,7 +113,12 @@ export class FixtureConnector implements CustomerSuccessConnectors {
     const result = (await this.snapshot(query))?.billing;
     if (!result || result.status === 'empty') return { status: 'empty' as const };
     if (result.status === 'unavailable') return result;
-    return inWindow(result.data.asOf, query.window) ? result : { status: 'empty' as const };
+    return inWindow(result.data.asOf, query.window)
+      ? billingResultSchema.parse({
+          status: 'available',
+          data: { ...result.data, tenantId: query.tenantId, accountId: query.accountId },
+        })
+      : { status: 'empty' as const };
   }
 
   async readCrmNotes(query: Query) {
@@ -109,7 +127,10 @@ export class FixtureConnector implements CustomerSuccessConnectors {
     if (result.status === 'unavailable') return result;
     const notes = result.data.notes.filter(note => inWindow(note.createdAt, query.window));
     return notes.length
-      ? notesResultSchema.parse({ status: 'available', data: { ...result.data, window: query.window, notes } })
+      ? notesResultSchema.parse({
+          status: 'available',
+          data: { ...result.data, tenantId: query.tenantId, accountId: query.accountId, window: query.window, notes },
+        })
       : { status: 'empty' as const };
   }
 
@@ -127,8 +148,12 @@ export class FixtureConnector implements CustomerSuccessConnectors {
   }
 }
 
-export function createConnectors(config: AppConfig, overrides: Partial<CustomerSuccessConnectors> = {}) {
-  const fixture = new FixtureConnector(config.fixturePath);
+export function createConnectors(
+  config: AppConfig,
+  writes: WriteIntentStore,
+  overrides: Partial<CustomerSuccessConnectors> = {},
+) {
+  const fixture = new FixtureConnector(config.fixturePath, config.fixtureTenantId);
   const crm =
     config.crmProvider === 'hubspot'
       ? new HubSpotConnector({
@@ -136,6 +161,7 @@ export function createConnectors(config: AppConfig, overrides: Partial<CustomerS
           token: config.hubspotToken!,
           baseUrl: config.hubspotBaseUrl,
           renewalProperty: config.hubspotRenewalProperty,
+          writes,
         })
       : fixture;
 

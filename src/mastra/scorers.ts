@@ -32,8 +32,15 @@ export const accountPlanQualityScorer = createScorer<Assessment, Review['plan']>
   const covered = risks.filter(risk => run.output.actions.some(action =>
     action.evidence.some(item => risk.has(hash(item))),
   )).length;
-  const valid = run.output.actions.filter(action => action.evidence.length && Date.parse(action.dueAt) >= Date.parse(run.input!.asOf)).length;
-  return ((risks.length ? covered / risks.length : 1) + valid / run.output.actions.length) / 2;
+  const valid = run.output.actions.filter(action => {
+    const factor = run.input!.riskFactors.find(risk => {
+      const evidence = refs(risk.evidence);
+      return action.evidence.some(item => evidence.has(hash(item)));
+    });
+    const owner = factor?.category === 'billing' ? 'billing' : factor?.category === 'support' ? 'support' : 'csm';
+    return action.evidence.length && Date.parse(action.dueAt) >= Date.parse(run.input!.asOf) && action.owner === owner;
+  }).length;
+  return (risks.length ? covered / risks.length : 1) * (valid / run.output.actions.length);
 });
 
 export const personalizationScorer = createScorer<Assessment, Review['outreach']>({

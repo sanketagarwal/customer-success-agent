@@ -36,10 +36,13 @@ unsupported.assessment.riskFactors[0]!.evidence[0]!.value = 999;
 const irrelevant = structuredClone(risk.plan);
 irrelevant.actions.forEach(action => action.evidence.forEach(item => { item.recordId = `fake-${item.recordId}`; }));
 const generic = { ...risk.outreach, claims: [] };
+const wrongOwners = structuredClone(risk.plan);
+wrongOwners.actions.forEach(action => { action.owner = 'customer'; });
 const negative = {
   unsupportedClaim: await unsupportedClaimScorer.run({ input: source, output: unsupported }),
   irrelevantActions: await actionRelevanceScorer.run({ input: risk.assessment, output: irrelevant }),
   genericOutreach: await personalizationScorer.run({ input: risk.assessment, output: generic }),
+  wrongOwners: await accountPlanQualityScorer.run({ input: risk.assessment, output: wrongOwners }),
 };
 
 const scores = (results: Record<string, { score: number }>) =>

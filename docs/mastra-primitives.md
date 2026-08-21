@@ -2,7 +2,7 @@
 
 | Primitive | Implementation |
 | --- | --- |
-| Scheduled workflows | `weekly-customer-success` runs the account workflow for every account returned by the CRM. |
+| Scheduled workflows | `weekly-customer-success` prepares an isolated review for every account returned by the CRM, with bounded concurrency and per-account failure handling. |
 | Structured output | The agent returns one typed assessment, plan, and outreach draft. |
 | Approval | `request-csm-approval` suspends the run and resumes from a decision, approver ID, and optional feedback. |
 | Workflow retries | Data collection, generation, and CRM writes each retry twice. |

@@ -6,6 +6,7 @@ import { FixtureConnector } from '../src/mastra/connectors.js';
 import { prepareReview } from '../src/mastra/customer-success.js';
 import { HubSpotConnector } from '../src/mastra/hubspot.js';
 import { FixtureReviewer } from '../src/mastra/reviewer.js';
+import { MemoryState } from '../src/mastra/state.js';
 import { collectAccountData } from '../src/mastra/workflows.js';
 
 const json = (value: unknown, status = 200) => Response.json(value, { status });
@@ -22,6 +23,9 @@ describe('HubSpot connector', () => {
       },
     }];
     const tasks: Array<{ id: string; createdAt: string; properties: Record<string, string> }> = [];
+    let hideTasks = false;
+    let loseTaskResponse = false;
+    let taskDelayMs = 0;
     const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input));
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
@@ -36,7 +40,7 @@ describe('HubSpot connector', () => {
         return json({ results: notes.map(note => ({ toObjectId: note.id })) });
       }
       if (url.pathname.endsWith('/associations/tasks')) {
-        return json({ results: tasks.map(task => ({ toObjectId: task.id })) });
+        return json({ results: hideTasks ? [] : tasks.map(task => ({ toObjectId: task.id })) });
       }
       if (url.pathname === '/crm/v3/objects/notes/batch/read') {
         return json({ results: notes.filter(note => body.inputs.some((item: { id: string }) => item.id === note.id)) });
@@ -48,8 +52,13 @@ describe('HubSpot connector', () => {
         return json({ results: [{ typeId: 192, category: 'HUBSPOT_DEFINED', label: null }] });
       }
       if (url.pathname === '/crm/v3/objects/tasks' && init?.method === 'POST') {
+        if (taskDelayMs) await new Promise(resolveDelay => setTimeout(resolveDelay, taskDelayMs));
         const task = { id: `task-${tasks.length + 1}`, createdAt: '2026-08-17T09:00:00.000Z', properties: body.properties };
         tasks.push(task);
+        if (loseTaskResponse) {
+          loseTaskResponse = false;
+          throw new Error('connection lost after commit');
+        }
         return json(task, 201);
       }
       if (url.pathname === '/crm/v3/objects/notes' && init?.method === 'POST') {
@@ -59,13 +68,15 @@ describe('HubSpot connector', () => {
       }
       return json({ message: `Unhandled ${url.pathname}` }, 404);
     });
-    const hubspot = new HubSpotConnector({
+    const options = {
       tenantId: 'demo-tenant',
       token: 'test-token',
       baseUrl: 'https://api.hubapi.com',
       renewalProperty: 'renewal_date',
+      writes: new MemoryState(),
       fetch: fetcher as typeof fetch,
-    });
+    };
+    const hubspot = new HubSpotConnector(options);
 
     await expect(hubspot.listAccounts('demo-tenant')).resolves.toMatchObject([
       { accountId: '340734348989', name: 'Redwood Retail', renewalAt: '2026-09-12T00:00:00.000Z' },
@@ -86,10 +97,35 @@ describe('HubSpot connector', () => {
     const { review } = await prepareReview(snapshot, new FixtureReviewer(), null);
     const input = { tenantId: 'demo-tenant', accountId: '340734348989', runId: 'hubspot-demo', review };
     const first = await hubspot.writeToCrm(input);
-    const second = await hubspot.writeToCrm(input);
+    const second = await new HubSpotConnector(options).writeToCrm(input);
     expect(first).toMatchObject({ created: true });
     expect(second).toEqual({ ...first, created: false });
     expect(tasks).toHaveLength(review.plan.actions.length);
     expect(notes).toHaveLength(2);
+
+    await hubspot.writeToCrm({ ...input, runId: 'another-run' });
+    expect(tasks).toHaveLength(review.plan.actions.length * 2);
+
+    loseTaskResponse = true;
+    await expect(hubspot.writeToCrm({ ...input, runId: 'lost-response' })).resolves.toMatchObject({ created: true });
+    expect(tasks).toHaveLength(review.plan.actions.length * 3);
+
+    hideTasks = true;
+    loseTaskResponse = true;
+    await expect(hubspot.writeToCrm({ ...input, runId: 'delayed-association' })).rejects.toThrow();
+    const countAfterAmbiguousCommit = tasks.length;
+    hideTasks = false;
+    await expect(hubspot.writeToCrm({ ...input, runId: 'delayed-association' })).resolves.toMatchObject({ created: true });
+    expect(tasks).toHaveLength(countAfterAmbiguousCommit);
+
+    taskDelayMs = 20;
+    const concurrentInput = { ...input, runId: 'concurrent-run' };
+    const concurrent = await Promise.allSettled([
+      hubspot.writeToCrm(concurrentInput),
+      new HubSpotConnector(options).writeToCrm(concurrentInput),
+    ]);
+    expect(concurrent.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(concurrent.filter(result => result.status === 'rejected')).toHaveLength(1);
+    expect(tasks).toHaveLength(countAfterAmbiguousCommit + review.plan.actions.length);
   });
 });

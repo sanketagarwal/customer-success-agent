@@ -38,7 +38,7 @@ export const mastra = new Mastra({
         serviceName: 'customer-success-agent',
         exporters: [new MastraStorageExporter({ strategy: 'realtime' })],
         spanOutputProcessors: [new SensitiveDataFilter({
-          sensitiveFields: ['authorization', 'token', 'body', 'feedback', 'notes', 'email'],
+          sensitiveFields: ['authorization', 'token', 'body', 'subject', 'feedback', 'notes', 'email'],
         })],
         requestContextKeys: ['tenant-id', 'account-id'],
         logging: { enabled: false, level: 'info' },
