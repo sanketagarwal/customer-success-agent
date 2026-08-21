@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
 const iso = z.iso.datetime({ offset: true });
+const object = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value)
+  ? value as Record<string, unknown>
+  : null;
 const result = <T extends z.ZodType>(data: T) => z.discriminatedUnion('status', [
   z.object({ status: z.literal('available'), data }),
   z.object({ status: z.literal('empty') }),
@@ -44,7 +47,7 @@ export const usageResultSchema = result(z.array(usagePoint));
 export const supportResultSchema = result(z.array(ticket));
 export const billingResultSchema = result(billing);
 export const notesResultSchema = result(z.array(note));
-export const snapshotSchema = z.object({
+const snapshotBase = z.object({
   tenantId: z.string(),
   accountId: z.string(),
   window: windowSchema,
@@ -53,6 +56,20 @@ export const snapshotSchema = z.object({
   billing: billingResultSchema,
   crm: notesResultSchema,
 });
+const unwrap = (value: unknown, key: string) => {
+  const source = object(value);
+  const data = object(source?.data);
+  return source?.status === 'available' && data && key in data ? { ...source, data: data[key] } : value;
+};
+export const snapshotSchema = z.preprocess(value => {
+  const source = object(value);
+  return source ? {
+    ...source,
+    usage: unwrap(source.usage, 'points'),
+    support: unwrap(source.support, 'tickets'),
+    crm: unwrap(source.crm, 'notes'),
+  } : value;
+}, snapshotBase);
 
 const evidenceSchema = z.object({
   source: z.enum(['usage', 'support', 'billing', 'crm']),
@@ -84,7 +101,7 @@ export const proposalSchema = z.object({
 
 const risk = riskCore.extend({ title: z.string(), explanation: z.string() });
 const action = actionCore.extend({ title: z.string(), rationale: z.string() });
-export const reviewSchema = z.object({
+const reviewBase = z.object({
   asOf: iso,
   sourceHash: z.string(),
   assessment: z.object({
@@ -106,6 +123,27 @@ export const reviewSchema = z.object({
     claims: proposalSchema.shape.claims,
   }),
 });
+export const reviewSchema = z.preprocess(value => {
+  const source = object(value);
+  const assessment = object(source?.assessment);
+  if (!source || !assessment || !('riskFactors' in assessment)) return value;
+  const plan = object(source.plan);
+  const outreach = object(source.outreach);
+  return {
+    asOf: assessment.asOf,
+    sourceHash: assessment.sourceHash,
+    assessment: {
+      score: assessment.score,
+      status: assessment.status,
+      summary: assessment.summary,
+      completeness: assessment.dataCompleteness,
+      risks: assessment.riskFactors,
+    },
+    drift: source.drift,
+    plan: { actions: plan?.actions },
+    outreach: { subject: outreach?.subject, body: outreach?.body, claims: outreach?.claims },
+  };
+}, reviewBase);
 
 export const crmWriteSchema = z.object({
   noteId: z.string(),

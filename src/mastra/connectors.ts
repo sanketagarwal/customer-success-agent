@@ -10,7 +10,6 @@ import {
   billingResultSchema,
   crmWriteSchema,
   notesResultSchema,
-  snapshotSchema,
   supportResultSchema,
   usageResultSchema,
   type Account,
@@ -42,7 +41,12 @@ export interface Connectors {
 
 const fixtureSchema = z.object({
   accounts: z.array(accountSchema),
-  snapshots: z.record(z.string(), snapshotSchema.pick({ usage: true, support: true, billing: true, crm: true })),
+  snapshots: z.record(z.string(), z.object({
+    usage: usageResultSchema,
+    support: supportResultSchema,
+    billing: billingResultSchema,
+    crm: notesResultSchema,
+  })),
 });
 const inWindow = (date: string, { start, end }: TimeWindow) => {
   const time = Date.parse(date);

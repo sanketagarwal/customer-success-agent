@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { FixtureConnector } from '../src/mastra/connectors.js';
 import { buildReview, groundingIssues, prepareReview, redact } from '../src/mastra/review.js';
+import { reviewSchema, snapshotSchema } from '../src/mastra/schemas.js';
 import { LibSqlState } from '../src/mastra/state.js';
 import { collectAccountData } from '../src/mastra/workflows.js';
 import { fixtureReviewer } from './fixtures.js';
@@ -79,5 +80,41 @@ describe('structured review', () => {
       { start: '2026-08-17T08:30:00.000Z', end: '2026-08-17T11:00:00.000Z' },
     );
     expect(source.usage).toEqual({ status: 'empty' });
+  });
+
+  it('normalizes reviews and snapshots persisted by the previous template', async () => {
+    const current = await snapshot();
+    if (current.usage.status !== 'available' || current.support.status !== 'available' || current.crm.status !== 'available') {
+      throw new Error('fixture missing');
+    }
+    const legacySnapshot = {
+      ...current,
+      usage: { status: 'available', data: { tenantId: current.tenantId, accountId: current.accountId, window: current.window, points: current.usage.data } },
+      support: { status: 'available', data: { tenantId: current.tenantId, accountId: current.accountId, window: current.window, tickets: current.support.data } },
+      crm: { status: 'available', data: { tenantId: current.tenantId, accountId: current.accountId, window: current.window, notes: current.crm.data } },
+    };
+    expect(snapshotSchema.parse(legacySnapshot)).toEqual(current);
+
+    const review = (await prepareReview(current, fixtureReviewer, null)).review;
+    const legacyReview = {
+      assessment: {
+        ...review.assessment,
+        tenantId: current.tenantId,
+        accountId: current.accountId,
+        asOf: review.asOf,
+        sourceHash: review.sourceHash,
+        riskFactors: review.assessment.risks.map(risk => ({ ...risk, status: 'new' })),
+        dataCompleteness: review.assessment.completeness,
+      },
+      drift: review.drift,
+      plan: { objective: 'Previous objective', actions: review.plan.actions },
+      outreach: {
+        ...review.outreach,
+        claims: review.outreach.claims.map(claim => ({ ...claim, text: 'Previous claim text' })),
+        channel: 'email',
+        draftOnly: true,
+      },
+    };
+    expect(reviewSchema.parse(legacyReview)).toEqual(review);
   });
 });

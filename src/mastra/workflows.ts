@@ -28,7 +28,7 @@ export const approvalSchema = z.object({
 });
 
 const usageSchema = z.object({ inputTokens: z.number(), outputTokens: z.number(), costUsd: z.number() });
-const stateSchema = z.object({
+const stateBase = z.object({
   runId: z.string(),
   tenantId: z.string(),
   accountId: z.string(),
@@ -41,6 +41,16 @@ const stateSchema = z.object({
   usage: usageSchema,
   crm: crmWriteSchema.nullable(),
 });
+const stateSchema = z.preprocess(value => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const source = value as Record<string, unknown>;
+  const snapshot = snapshotSchema.safeParse(source.snapshot);
+  if (!snapshot.success || source.review == null) return snapshot.success ? { ...source, snapshot: snapshot.data } : value;
+  const review = reviewSchema.safeParse(source.review);
+  return review.success
+    ? { ...source, snapshot: snapshot.data, review: { ...review.data, sourceHash: snapshotHash(snapshot.data) } }
+    : value;
+}, stateBase);
 type WorkflowState = z.infer<typeof stateSchema>;
 
 const approvalRequestSchema = z.object({
