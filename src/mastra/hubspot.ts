@@ -76,7 +76,7 @@ export class HubSpotConnector
       }
       if (attempt + 1 < attempts) await new Promise(resolve => setTimeout(resolve, 250 * 2 ** attempt));
     }
-    throw new Error('HubSpot request failed after three attempts', { cause: failure });
+    throw new Error('HubSpot request failed', { cause: failure });
   }
 
   async listAccounts(tenantId: string) {
@@ -145,7 +145,8 @@ export class HubSpotConnector
     const existingNote = notes.find(note => note.properties.hs_note_body?.includes(marker));
     const existingTasks = new Map(
       tasks.flatMap(task => {
-        const actionId = task.properties.hs_task_body?.match(/\[action:([^\]]+)]/)?.[1];
+        const body = task.properties.hs_task_body;
+        const actionId = body?.includes(marker) ? body.match(/\[action:([^\]]+)]/)?.[1] : undefined;
         return actionId ? [[actionId, task.id] as const] : [];
       }),
     );

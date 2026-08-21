@@ -92,19 +92,32 @@ export class LibSqlState implements CustomerSuccessState {
 }
 
 export function monitoringSummary(events: readonly MonitoringEvent[]) {
-  const latency = events.map(event => event.latencyMs).sort((a, b) => a - b);
-  const sum = (field: 'acceptedRecommendations' | 'inputTokens' | 'outputTokens' | 'costUsd') =>
-    events.reduce((total, event) => total + event[field], 0);
-  return {
-    reviews: events.filter(event => event.phase === 'review').length,
-    approvals: events.filter(event => event.phase === 'approval').length,
-    acceptedRecommendations: sum('acceptedRecommendations'),
-    outreachApprovals: events.filter(event => event.outreachApproved).length,
-    humanFeedback: events.filter(event => event.feedback).length,
-    inputTokens: sum('inputTokens'),
-    outputTokens: sum('outputTokens'),
-    costUsd: sum('costUsd'),
-    averageLatencyMs: latency.length ? latency.reduce((total, value) => total + value, 0) / latency.length : 0,
-    p95LatencyMs: latency[Math.max(0, Math.ceil(latency.length * 0.95) - 1)] ?? 0,
+  const summarize = (values: readonly MonitoringEvent[]) => {
+    const latency = values.map(event => event.latencyMs).sort((a, b) => a - b);
+    const sum = (field: 'acceptedRecommendations' | 'inputTokens' | 'outputTokens' | 'costUsd') =>
+      values.reduce((total, event) => total + event[field], 0);
+    return {
+      reviews: values.filter(event => event.phase === 'review').length,
+      approvals: values.filter(event => event.phase === 'approval').length,
+      acceptedRecommendations: sum('acceptedRecommendations'),
+      outreachApprovals: values.filter(event => event.outreachApproved).length,
+      humanFeedback: values.filter(event => event.feedback).length,
+      inputTokens: sum('inputTokens'),
+      outputTokens: sum('outputTokens'),
+      costUsd: sum('costUsd'),
+      averageLatencyMs: latency.length ? latency.reduce((total, value) => total + value, 0) / latency.length : 0,
+      p95LatencyMs: latency[Math.max(0, Math.ceil(latency.length * 0.95) - 1)] ?? 0,
+    };
   };
+  const accounts = [...new Set(events.map(event => event.accountId))].sort().map(accountId => {
+    const accountEvents = events.filter(event => event.accountId === accountId);
+    const latest = accountEvents.filter(event => event.phase === 'review').at(-1);
+    return {
+      accountId,
+      riskScore: latest?.riskScore ?? null,
+      scoreDelta: latest?.scoreDelta ?? null,
+      ...summarize(accountEvents),
+    };
+  });
+  return { totals: summarize(events), accounts };
 }

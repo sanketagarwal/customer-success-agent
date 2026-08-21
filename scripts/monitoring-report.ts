@@ -12,7 +12,13 @@ try {
   });
   const summary = monitoringSummary(await runtime.state.events('demo-tenant'));
   console.log(JSON.stringify(summary, null, 2));
-  if (summary.reviews !== 1 || summary.approvals !== 1 || summary.outreachApprovals !== 1 || !summary.humanFeedback) {
+  if (
+    summary.totals.reviews !== 1 ||
+    summary.totals.approvals !== 1 ||
+    summary.totals.outreachApprovals !== 1 ||
+    !summary.totals.humanFeedback ||
+    summary.accounts[0]?.riskScore == null
+  ) {
     throw new Error('Monitoring demo did not record the expected metrics');
   }
 } finally {

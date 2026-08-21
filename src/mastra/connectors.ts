@@ -114,14 +114,15 @@ export class FixtureConnector implements CustomerSuccessConnectors {
   }
 
   async writeToCrm(input: CrmWriteInput) {
-    const existing = this.writes.get(input.runId);
+    const key = `${input.tenantId}:${input.accountId}:${input.runId}`;
+    const existing = this.writes.get(key);
     if (existing) return { ...existing, created: false };
     const result = crmWriteSchema.parse({
       noteId: stableId('fixture-note', input.runId),
       taskIds: input.review.plan.actions.map(action => stableId('fixture-task', `${input.runId}:${action.id}`)),
       created: true,
     });
-    this.writes.set(input.runId, result);
+    this.writes.set(key, result);
     return result;
   }
 }

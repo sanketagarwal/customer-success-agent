@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createFixtureRuntime } from '../src/mastra/runtime.js';
+import { monitoringSummary } from '../src/mastra/state.js';
 import { accountInputSchema, approvalSchema } from '../src/mastra/workflows.js';
 
 const runtimes: Awaited<ReturnType<typeof createFixtureRuntime>>[] = [];
@@ -73,6 +74,10 @@ describe('customer-success workflow', () => {
       outreachApproved: true,
       feedback: true,
       acceptedRecommendations: 4,
+    });
+    expect(monitoringSummary(events)).toMatchObject({
+      totals: { reviews: 1, approvals: 1, outreachApprovals: 1 },
+      accounts: [{ accountId: '340734348989', riskScore: 0 }],
     });
   });
 

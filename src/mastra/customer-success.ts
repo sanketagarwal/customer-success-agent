@@ -153,9 +153,26 @@ export function groundingErrors(review: Review, snapshot: Snapshot) {
     ...review.plan.actions.map((action, index) => [`actions[${index}]`, action.evidence] as const),
     ...review.outreach.claims.map((claim, index) => [`claims[${index}]`, claim.evidence] as const),
   ];
-  return groups.flatMap(([name, evidence]) =>
+  const errors = groups.flatMap(([name, evidence]) =>
     evidence.flatMap((item, index) => evidenceIsGrounded(item, snapshot) ? [] : [`${name}.evidence[${index}]`]),
   );
+  const riskEvidence = new Set(review.assessment.riskFactors.flatMap(risk => risk.evidence.map(hash)));
+  review.plan.actions.forEach((action, index) => {
+    if (!action.evidence.some(item => riskEvidence.has(hash(item)))) errors.push(`actions[${index}].relevance`);
+  });
+  review.outreach.claims.forEach((claim, index) => {
+    if (!claim.evidence.some(item => riskEvidence.has(hash(item)))) errors.push(`claims[${index}].relevance`);
+  });
+  for (const [index, risk] of review.assessment.riskFactors.entries()) {
+    const evidence = new Set(risk.evidence.map(hash));
+    if (!review.plan.actions.some(action => action.evidence.some(item => evidence.has(hash(item))))) {
+      errors.push(`riskFactors[${index}].planCoverage`);
+    }
+    if (!review.outreach.claims.some(claim => claim.evidence.some(item => evidence.has(hash(item))))) {
+      errors.push(`riskFactors[${index}].outreachCoverage`);
+    }
+  }
+  return errors;
 }
 
 export async function prepareReview(snapshot: Snapshot, reviewer: Reviewer, previous: Review | null) {
