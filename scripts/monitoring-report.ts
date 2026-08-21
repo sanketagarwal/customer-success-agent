@@ -1,7 +1,7 @@
 import { createFixtureRuntime } from '../src/mastra/adapters/fixture/fixture-runtime.js';
 import { buildCustomerSuccessMonitoringReport } from '../src/mastra/monitoring/customer-success-report.js';
 
-const runtime = createFixtureRuntime();
+const runtime = await createFixtureRuntime();
 const tenantId = 'demo-tenant';
 const accounts = await runtime.fixtures.listAccounts(tenantId);
 const prepared = await Promise.all(

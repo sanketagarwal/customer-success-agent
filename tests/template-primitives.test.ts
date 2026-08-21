@@ -16,8 +16,8 @@ describe('template primitives', () => {
     expect(loadConfig({}).generationMode).toBe('model');
   });
 
-  it('allows every data source to be replaced independently', () => {
-    const runtime = createFixtureRuntime();
+  it('allows every data source to be replaced independently', async () => {
+    const runtime = await createFixtureRuntime();
     const store = new LibSqlOperationalStore(':memory:');
     try {
       const connectors = createConnectors(loadConfig({ CRM_PROVIDER: 'fixture', MASTRA_DB_URL: ':memory:' }), store, {
@@ -42,8 +42,8 @@ describe('template primitives', () => {
     }
   });
 
-  it('registers connector-neutral CRM tools', () => {
-    const runtime = createFixtureRuntime();
+  it('registers connector-neutral CRM tools', async () => {
+    const runtime = await createFixtureRuntime();
     const tools = createCrmTools(runtime.fixtures, runtime.writer);
     expect(tools.listCustomerAccounts.id).toBe('list-customer-accounts');
     expect(tools.readCustomerCrmNotes.id).toBe('read-customer-crm-notes');
@@ -51,8 +51,8 @@ describe('template primitives', () => {
     expect(tools.writeApprovedCustomerSuccessDraft.requireApproval).toBe(true);
   });
 
-  it('exposes source reads, processing, approval, and CRM writes as workflow steps', () => {
-    const runtime = createFixtureRuntime();
+  it('exposes source reads, processing, approval, and CRM writes as workflow steps', async () => {
+    const runtime = await createFixtureRuntime();
     expect(Object.keys(runtime.accountWorkflow.steps)).toEqual(
       expect.arrayContaining([
         'initialize-account-review',
@@ -84,7 +84,7 @@ describe('template primitives', () => {
   });
 
   it('runs the at-risk demo account from the Studio schema default', async () => {
-    const runtime = createFixtureRuntime();
+    const runtime = await createFixtureRuntime();
     const run = await runtime.accountWorkflow.createRun({ runId: 'studio-one-click' });
     const result = await run.start({ inputData: accountRunInputSchema.parse({}) });
     expect(result.status).toBe('suspended');
@@ -97,7 +97,7 @@ describe('template primitives', () => {
   });
 
   it('uses Mastra step retries before returning unknown_retry', async () => {
-    const runtime = createFixtureRuntime();
+    const runtime = await createFixtureRuntime();
     const supportReads = vi.spyOn(runtime.service, 'readSupport');
     const run = await runtime.accountWorkflow.createRun({ runId: 'retry-fixture' });
     const result = await run.start({
@@ -116,7 +116,7 @@ describe('template primitives', () => {
   });
 
   it('retries each model-backed generation stage independently', async () => {
-    const runtime = createFixtureRuntime();
+    const runtime = await createFixtureRuntime();
     const originalAssess = runtime.service.assessHealth.bind(runtime.service);
     const originalPlan = runtime.service.createPlan.bind(runtime.service);
     const originalDraft = runtime.service.draftOutreach.bind(runtime.service);
@@ -143,7 +143,7 @@ describe('template primitives', () => {
   });
 
   it('binds approval identity to RequestContext when supplied', async () => {
-    const runtime = createFixtureRuntime();
+    const runtime = await createFixtureRuntime();
     const run = await runtime.accountWorkflow.createRun({ runId: 'context-approval' });
     const suspended = await run.start({
       inputData: {
@@ -172,7 +172,7 @@ describe('template primitives', () => {
   });
 
   it('aggregates drift, decisions, costs, latency, and feedback by account', async () => {
-    const runtime = createFixtureRuntime();
+    const runtime = await createFixtureRuntime();
     const prepared = await runtime.service.prepare({
       runId: 'monitoring-test',
       tenantId: 'demo-tenant',
@@ -208,7 +208,7 @@ describe('template primitives', () => {
   });
 
   it('persists monitoring events through the LibSQL operational store', async () => {
-    const runtime = createFixtureRuntime();
+    const runtime = await createFixtureRuntime();
     await runtime.service.prepare({
       runId: 'libsql-monitor-source',
       tenantId: 'demo-tenant',

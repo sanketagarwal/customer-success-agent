@@ -7,7 +7,7 @@ import {
   riskFactorExtractionScorer,
 } from '../src/mastra/scorers/index.js';
 
-const runtime = createFixtureRuntime();
+const runtime = await createFixtureRuntime();
 const tenantId = 'demo-tenant';
 const window = {
   start: new Date(Date.parse(runtime.asOf) - 28 * 86_400_000).toISOString(),

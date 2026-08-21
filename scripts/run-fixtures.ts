@@ -4,7 +4,7 @@ import { createFixtureRuntime } from '../src/mastra/adapters/fixture/fixture-run
 import { approvalRequestSchema, preparedRunSchema, type ApprovalDecision } from '../src/mastra/schemas/index.js';
 import { executeScheduledAccountReviews } from '../src/mastra/workflows/scheduled-workflow.js';
 
-const runtime = createFixtureRuntime();
+const runtime = await createFixtureRuntime();
 const tenantId = 'demo-tenant';
 const batch = await executeScheduledAccountReviews(
   {

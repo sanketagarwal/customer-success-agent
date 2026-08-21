@@ -14,7 +14,7 @@ import { MockCrmWriter } from './mock-crm-writer.js';
 
 const fixtureAsOf = '2026-08-17T09:00:00.000Z';
 
-export function createFixtureRuntime(
+export async function createFixtureRuntime(
   options: {
     fixturePath?: string;
     asOf?: string;
@@ -56,11 +56,12 @@ export function createFixtureRuntime(
     },
     accountWorkflow,
   );
-  const storage = new LibSQLStore({ id: 'fixture-runtime-storage', url: ':memory:' });
+  const storage = new LibSQLStore({ id: 'fixture-runtime-storage', url: 'file::memory:?cache=shared' });
   const mastra = new Mastra({
     storage,
     workflows: { accountWorkflow, scheduledWorkflow },
   });
+  await mastra.getStorage()?.init();
   return {
     asOf,
     clock,
