@@ -1,280 +1,167 @@
 {
   "accounts": [
     {
-      "tenantId": "demo-tenant",
       "accountId": "340739743463",
-      "name": "CS Demo — Northstar Labs",
-      "renewalAt": "2026-10-15T00:00:00.000Z",
-      "ownerId": "csm-alex"
+      "name": "CS Demo — Northstar Labs"
     },
     {
-      "tenantId": "demo-tenant",
       "accountId": "340734348989",
-      "name": "CS Demo — Redwood Retail",
-      "renewalAt": "2026-09-12T00:00:00.000Z",
-      "ownerId": "csm-priya"
+      "name": "CS Demo — Redwood Retail"
     },
     {
-      "tenantId": "demo-tenant",
       "accountId": "340737895140",
-      "name": "CS Demo — New Harbor Co",
-      "renewalAt": null,
-      "ownerId": "csm-alex"
+      "name": "CS Demo — New Harbor Co"
     },
     {
-      "tenantId": "demo-tenant",
       "accountId": "340878324429",
-      "name": "CS Demo — Atlas Freight",
-      "renewalAt": "2026-11-01T00:00:00.000Z",
-      "ownerId": "csm-priya"
+      "name": "CS Demo — Atlas Freight"
     }
   ],
   "snapshots": {
     "340739743463": {
-      "tenantId": "demo-tenant",
-      "accountId": "340739743463",
-      "window": {
-        "start": "2026-07-20T09:00:00.000Z",
-        "end": "2026-08-17T09:00:00.000Z"
-      },
       "usage": {
         "status": "available",
-        "data": {
-          "tenantId": "demo-tenant",
-          "accountId": "340739743463",
-          "window": {
-            "start": "2026-07-20T09:00:00.000Z",
-            "end": "2026-08-17T09:00:00.000Z"
+        "data": [
+          {
+            "recordId": "usage-healthy-1",
+            "timestamp": "2026-07-21T09:00:00.000Z",
+            "activeUsers": 81,
+            "adoptionRate": 0.81
           },
-          "points": [
-            {
-              "recordId": "usage-healthy-1",
-              "timestamp": "2026-07-21T09:00:00.000Z",
-              "activeUsers": 81,
-              "licensedSeats": 100,
-              "events": 12400,
-              "adoptionRate": 0.81
-            },
-            {
-              "recordId": "usage-healthy-2",
-              "timestamp": "2026-08-16T09:00:00.000Z",
-              "activeUsers": 86,
-              "licensedSeats": 100,
-              "events": 13950,
-              "adoptionRate": 0.86
-            }
-          ]
-        }
+          {
+            "recordId": "usage-healthy-2",
+            "timestamp": "2026-08-16T09:00:00.000Z",
+            "activeUsers": 86,
+            "adoptionRate": 0.86
+          }
+        ]
       },
       "support": {
         "status": "available",
-        "data": {
-          "tenantId": "demo-tenant",
-          "accountId": "340739743463",
-          "window": {
-            "start": "2026-07-20T09:00:00.000Z",
-            "end": "2026-08-17T09:00:00.000Z"
-          },
-          "tickets": [
-            {
-              "recordId": "ticket-healthy-1",
-              "createdAt": "2026-08-02T10:00:00.000Z",
-              "status": "resolved",
-              "priority": "normal",
-              "subject": "Dashboard filter question",
-              "satisfactionScore": 5,
-              "resolutionHours": 2.5
-            }
-          ]
-        }
+        "data": [
+          {
+            "recordId": "ticket-healthy-1",
+            "createdAt": "2026-08-02T10:00:00.000Z",
+            "status": "resolved",
+            "priority": "normal",
+            "subject": "Dashboard filter question"
+          }
+        ]
       },
       "billing": {
         "status": "available",
         "data": {
-          "tenantId": "demo-tenant",
-          "accountId": "340739743463",
           "recordId": "billing-healthy-1",
           "asOf": "2026-08-17T08:00:00.000Z",
           "standing": "current",
           "renewalAt": "2026-10-15T00:00:00.000Z",
-          "daysPastDue": 0,
-          "annualValue": 72000,
-          "currency": "USD"
+          "daysPastDue": 0
         }
       },
       "crm": {
         "status": "available",
-        "data": {
-          "tenantId": "demo-tenant",
-          "accountId": "340739743463",
-          "window": {
-            "start": "2026-07-20T09:00:00.000Z",
-            "end": "2026-08-17T09:00:00.000Z"
-          },
-          "notes": [
-            {
-              "recordId": "note-healthy-1",
-              "createdAt": "2026-08-12T12:00:00.000Z",
-              "authorId": "csm-alex",
-              "body": "Sponsor confirmed the rollout is on track and the team is seeing value.",
-              "sentiment": "positive"
-            }
-          ]
-        }
+        "data": [
+          {
+            "recordId": "note-healthy-1",
+            "createdAt": "2026-08-12T12:00:00.000Z",
+            "body": "Sponsor confirmed the rollout is on track and the team is seeing value.",
+            "sentiment": "positive"
+          }
+        ]
       }
     },
     "340734348989": {
-      "tenantId": "demo-tenant",
-      "accountId": "340734348989",
-      "window": {
-        "start": "2026-07-20T09:00:00.000Z",
-        "end": "2026-08-17T09:00:00.000Z"
-      },
       "usage": {
         "status": "available",
-        "data": {
-          "tenantId": "demo-tenant",
-          "accountId": "340734348989",
-          "window": {
-            "start": "2026-07-20T09:00:00.000Z",
-            "end": "2026-08-17T09:00:00.000Z"
+        "data": [
+          {
+            "recordId": "usage-declining-1",
+            "timestamp": "2026-07-21T09:00:00.000Z",
+            "activeUsers": 72,
+            "adoptionRate": 0.72
           },
-          "points": [
-            {
-              "recordId": "usage-declining-1",
-              "timestamp": "2026-07-21T09:00:00.000Z",
-              "activeUsers": 72,
-              "licensedSeats": 100,
-              "events": 10300,
-              "adoptionRate": 0.72
-            },
-            {
-              "recordId": "usage-declining-2",
-              "timestamp": "2026-08-16T09:00:00.000Z",
-              "activeUsers": 31,
-              "licensedSeats": 100,
-              "events": 3700,
-              "adoptionRate": 0.31
-            }
-          ]
-        }
+          {
+            "recordId": "usage-declining-2",
+            "timestamp": "2026-08-16T09:00:00.000Z",
+            "activeUsers": 31,
+            "adoptionRate": 0.31
+          }
+        ]
       },
       "support": {
         "status": "available",
-        "data": {
-          "tenantId": "demo-tenant",
-          "accountId": "340734348989",
-          "window": {
-            "start": "2026-07-20T09:00:00.000Z",
-            "end": "2026-08-17T09:00:00.000Z"
-          },
-          "tickets": [
-            {
-              "recordId": "ticket-declining-1",
-              "createdAt": "2026-08-10T14:00:00.000Z",
-              "status": "open",
-              "priority": "urgent",
-              "subject": "Production export failures",
-              "satisfactionScore": null,
-              "resolutionHours": null
-            }
-          ]
-        }
+        "data": [
+          {
+            "recordId": "ticket-declining-1",
+            "createdAt": "2026-08-10T14:00:00.000Z",
+            "status": "open",
+            "priority": "urgent",
+            "subject": "Production export failures"
+          }
+        ]
       },
       "billing": {
         "status": "available",
         "data": {
-          "tenantId": "demo-tenant",
-          "accountId": "340734348989",
           "recordId": "billing-declining-1",
           "asOf": "2026-08-17T08:00:00.000Z",
           "standing": "past_due",
           "renewalAt": "2026-09-12T00:00:00.000Z",
-          "daysPastDue": 18,
-          "annualValue": 125000,
-          "currency": "USD"
+          "daysPastDue": 18
         }
       },
       "crm": {
         "status": "available",
-        "data": {
-          "tenantId": "demo-tenant",
-          "accountId": "340734348989",
-          "window": {
-            "start": "2026-07-20T09:00:00.000Z",
-            "end": "2026-08-17T09:00:00.000Z"
-          },
-          "notes": [
-            {
-              "recordId": "note-declining-1",
-              "createdAt": "2026-08-13T11:30:00.000Z",
-              "authorId": "csm-priya",
-              "body": "Executive sponsor is concerned about reliability and has paused the expansion discussion.",
-              "sentiment": "negative"
-            }
-          ]
-        }
+        "data": [
+          {
+            "recordId": "note-declining-1",
+            "createdAt": "2026-08-13T11:30:00.000Z",
+            "body": "Executive sponsor is concerned about reliability and has paused the expansion discussion.",
+            "sentiment": "negative"
+          }
+        ]
       }
     },
     "340737895140": {
-      "tenantId": "demo-tenant",
-      "accountId": "340737895140",
-      "window": {
-        "start": "2026-07-20T09:00:00.000Z",
-        "end": "2026-08-17T09:00:00.000Z"
+      "usage": {
+        "status": "available",
+        "data": [
+          {
+            "recordId": "usage-offset-1",
+            "timestamp": "2026-08-17T10:00:00+02:00",
+            "activeUsers": 1,
+            "adoptionRate": 0.1
+          }
+        ]
       },
-      "usage": { "status": "empty" },
       "support": { "status": "empty" },
       "billing": { "status": "empty" },
       "crm": { "status": "empty" }
     },
     "340878324429": {
-      "tenantId": "demo-tenant",
-      "accountId": "340878324429",
-      "window": {
-        "start": "2026-07-20T09:00:00.000Z",
-        "end": "2026-08-17T09:00:00.000Z"
-      },
       "usage": {
         "status": "available",
-        "data": {
-          "tenantId": "demo-tenant",
-          "accountId": "340878324429",
-          "window": {
-            "start": "2026-07-20T09:00:00.000Z",
-            "end": "2026-08-17T09:00:00.000Z"
-          },
-          "points": [
-            {
-              "recordId": "usage-down-1",
-              "timestamp": "2026-08-16T09:00:00.000Z",
-              "activeUsers": 44,
-              "licensedSeats": 60,
-              "events": 6700,
-              "adoptionRate": 0.73
-            }
-          ]
-        }
+        "data": [
+          {
+            "recordId": "usage-down-1",
+            "timestamp": "2026-08-16T09:00:00.000Z",
+            "activeUsers": 44,
+            "adoptionRate": 0.73
+          }
+        ]
       },
       "support": {
         "status": "unavailable",
-        "error": {
-          "provider": "fixture-support",
-          "message": "Simulated support transport outage"
-        }
+        "error": "Simulated support transport outage"
       },
       "billing": {
         "status": "available",
         "data": {
-          "tenantId": "demo-tenant",
-          "accountId": "340878324429",
           "recordId": "billing-down-1",
           "asOf": "2026-08-17T08:00:00.000Z",
           "standing": "current",
           "renewalAt": "2026-11-01T00:00:00.000Z",
-          "daysPastDue": 0,
-          "annualValue": 54000,
-          "currency": "USD"
+          "daysPastDue": 0
         }
       },
       "crm": { "status": "empty" }

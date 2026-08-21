@@ -1,62 +1,61 @@
 import { createScorer } from '@mastra/core/evals';
 
-import { groundingErrors, hash } from './customer-success.js';
-import type { Assessment, Review, Snapshot } from './schemas.js';
+import { groundingIssues, hash } from './review.js';
+import type { Review, Snapshot } from './schemas.js';
 
-const refs = (evidence: readonly { source: string; recordId: string; field: string; value: unknown }[]) =>
-  new Set(evidence.map(hash));
+const refs = (items: readonly { evidence: readonly unknown[] }[]) =>
+  new Set(items.flatMap(item => item.evidence.map(hash)));
 
 export const unsupportedClaimScorer = createScorer<Snapshot, Review>({
   id: 'unsupported-claim-detection',
-  description: 'Rejects claims whose evidence does not resolve to source data.',
-}).generateScore(({ run }) => groundingErrors(run.output, run.input!).length ? 0 : 1);
+  description: 'Rejects unsupported or irrelevant risks, actions, and outreach claims.',
+}).generateScore(({ run }) => !run.input || groundingIssues(run.output, run.input).length ? 0 : 1);
 
-export const riskFactorExtractionScorer = createScorer<{ expected: string[] }, Assessment>({
+export const riskFactorExtractionScorer = createScorer<{ expected: string[] }, Review['assessment']>({
   id: 'risk-factor-extraction',
-  description: 'Measures expected risk-factor recall without rewarding unsupported extras.',
+  description: 'Measures expected risk-category extraction.',
 }).generateScore(({ run }) => {
-  const expected = new Set(run.input!.expected);
-  const actual = new Set(run.output.riskFactors.map(risk => risk.id));
-  if (!expected.size) return actual.size ? 0 : 1;
-  const correct = [...expected].filter(id => actual.has(id)).length;
-  const extra = [...actual].filter(id => !expected.has(id)).length;
-  return Math.max(0, (correct - extra) / expected.size);
+  if (!run.input) return 0;
+  const actual = new Set<string>(run.output.risks.map(risk => risk.category));
+  return run.input.expected.length
+    ? run.input.expected.filter(category => actual.has(category)).length / run.input.expected.length
+    : Number(actual.size === 0);
 });
 
-export const accountPlanQualityScorer = createScorer<Assessment, Review['plan']>({
+const ownerFor = (category: string) => category === 'billing' ? 'billing' : category === 'support' ? 'support' : 'csm';
+export const accountPlanQualityScorer = createScorer<Review['assessment'], Review['plan']>({
   id: 'account-plan-quality',
-  description: 'Checks risk coverage, ownership, evidence, and due dates.',
+  description: 'Checks coverage, ownership, deadlines, and evidence.',
 }).generateScore(({ run }) => {
-  if (!run.output.actions.length) return run.input!.riskFactors.length ? 0 : 1;
-  const risks = run.input!.riskFactors.map(risk => refs(risk.evidence));
-  const covered = risks.filter(risk => run.output.actions.some(action =>
-    action.evidence.some(item => risk.has(hash(item))),
-  )).length;
-  const valid = run.output.actions.filter(action => {
-    const factor = run.input!.riskFactors.find(risk => {
-      const evidence = refs(risk.evidence);
-      return action.evidence.some(item => evidence.has(hash(item)));
-    });
-    const owner = factor?.category === 'billing' ? 'billing' : factor?.category === 'support' ? 'support' : 'csm';
-    return action.evidence.length && Date.parse(action.dueAt) >= Date.parse(run.input!.asOf) && action.owner === owner;
-  }).length;
-  return (risks.length ? covered / risks.length : 1) * (valid / run.output.actions.length);
+  if (!run.input) return 0;
+  return Number(run.input.risks.every(risk => {
+    const evidence = new Set(risk.evidence.map(hash));
+    return run.output.actions.some(action =>
+      action.owner === ownerFor(risk.category) && action.evidence.some(item => evidence.has(hash(item))),
+    );
+  }) && run.output.actions.every(action => Boolean(Date.parse(action.dueAt)) && action.evidence.length));
 });
 
-export const personalizationScorer = createScorer<Assessment, Review['outreach']>({
+export const personalizationScorer = createScorer<Review['assessment'], Review['outreach']>({
   id: 'outreach-personalization',
-  description: 'Checks that the outreach draft uses the account’s verified risks.',
+  description: 'Checks that outreach contains grounded account signals.',
 }).generateScore(({ run }) => {
-  const claims = refs(run.output.claims.flatMap(claim => claim.evidence));
-  const risks = run.input!.riskFactors.flatMap(risk => risk.evidence).map(hash);
-  return run.output.draftOnly && risks.every(reference => claims.has(reference)) ? 1 : 0;
+  if (!run.input) return 0;
+  const claims = refs(run.output.claims);
+  return Number(
+    run.input.risks.length === 0
+    || (run.output.body.length > 80 && run.input.risks.every(risk => risk.evidence.some(item => claims.has(hash(item))))),
+  );
 });
 
-export const actionRelevanceScorer = createScorer<Assessment, Review['plan']>({
+export const actionRelevanceScorer = createScorer<Review['assessment'], Review['plan']>({
   id: 'action-relevance',
-  description: 'Measures whether each action maps to an identified risk.',
+  description: 'Checks that every action is tied to risk evidence.',
 }).generateScore(({ run }) => {
-  const risks = refs(run.input!.riskFactors.flatMap(risk => risk.evidence));
-  const relevant = run.output.actions.filter(action => action.evidence.some(item => risks.has(hash(item)))).length;
-  return run.output.actions.length ? relevant / run.output.actions.length : run.input!.riskFactors.length ? 0 : 1;
+  if (!run.input) return 0;
+  const evidence = refs(run.input.risks);
+  return Number(
+    (run.input.risks.length === 0 || run.output.actions.length > 0)
+    && run.output.actions.every(action => action.evidence.some(item => evidence.has(hash(item)))),
+  );
 });

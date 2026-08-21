@@ -57,6 +57,6 @@ This is intentionally a hybrid demo: usage, support, and billing remain fixture-
 
 - Replace fixture methods in `src/mastra/connectors.ts` with your APIs or database queries.
 - Use `src/mastra/hubspot.ts` as an example, not a required CRM.
-- Adjust the schedule, model, memory, and risk behavior through `.env` and `src/mastra/reviewer.ts`.
+- Adjust the schedule, model, memory, and risk behavior through `.env` and `src/mastra/review.ts`.
 
 See [Mastra primitives](./docs/mastra-primitives.md), [evals](./docs/evals.md), and [monitoring](./docs/monitoring.md) for implementation details.

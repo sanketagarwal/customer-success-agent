@@ -3,10 +3,11 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { FixtureConnector } from '../src/mastra/connectors.js';
-import { canonicalReview, groundingErrors, prepareReview } from '../src/mastra/customer-success.js';
-import { FixtureReviewer, redactSnapshot } from '../src/mastra/reviewer.js';
-import { MemoryState } from '../src/mastra/state.js';
+import { buildReview, groundingIssues, prepareReview, redact } from '../src/mastra/review.js';
+import { reviewSchema, snapshotSchema } from '../src/mastra/schemas.js';
+import { LibSqlState } from '../src/mastra/state.js';
 import { collectAccountData } from '../src/mastra/workflows.js';
+import { fixtureReviewer } from './fixtures.js';
 
 const asOf = '2026-08-17T09:00:00.000Z';
 const window = { start: '2026-07-20T09:00:00.000Z', end: asOf };
@@ -23,52 +24,97 @@ async function snapshot() {
 describe('structured review', () => {
   it('grounds every risk, action, and outreach claim in source records', async () => {
     const source = await snapshot();
-    const result = await prepareReview(source, new FixtureReviewer(), null);
-    expect(result.errors).toEqual([]);
-    expect(result.review.assessment.riskFactors).toHaveLength(4);
+    const result = await prepareReview(source, fixtureReviewer, null);
+    expect(result.issues).toEqual([]);
+    expect(result.review.assessment.risks).toHaveLength(4);
     expect(result.review.outreach.body).toContain('Product adoption moved from 72% to 31%');
 
     const unsupported = structuredClone(result.review);
-    unsupported.assessment.riskFactors[0]!.evidence[0]!.value = 999;
-    expect(groundingErrors(unsupported, source)).toContain('riskFactors[0].evidence[0]');
+    unsupported.assessment.risks[0]!.evidence[0]!.value = 999;
+    expect(groundingIssues(unsupported, source)).toContain('risks[0].evidence[0]');
   });
 
   it('rejects risky reviews with missing plan or outreach coverage', async () => {
     const source = await snapshot();
-    const generated = await new FixtureReviewer().review(source);
-    generated.review.plan.actions = [];
-    generated.review.outreach.claims = [];
-    const errors = groundingErrors(canonicalReview(generated.review, source, null), source);
-    expect(errors).toContain('riskFactors[0].planCoverage');
-    expect(errors).toContain('riskFactors[0].outreachCoverage');
+    const { proposal } = await fixtureReviewer.review(source);
+    proposal.actions = [];
+    proposal.claims = [];
+    const issues = groundingIssues(buildReview(proposal, source, null), source);
+    expect(issues).toContain('risks[0].planCoverage');
+    expect(issues).toContain('risks[0].outreachCoverage');
   });
 
   it('calculates drift from account-scoped state', async () => {
     const source = await snapshot();
-    const reviewer = new FixtureReviewer();
-    const store = new MemoryState();
-    const first = await prepareReview(source, reviewer, await store.getReview('demo-tenant', source.accountId));
-    await store.saveReview(first.review);
-    const second = await prepareReview(source, reviewer, await store.getReview('demo-tenant', source.accountId));
+    const store = new LibSqlState('file::memory:');
+    const first = await prepareReview(source, fixtureReviewer, await store.getReview('demo-tenant', source.accountId));
+    await store.saveReview('demo-tenant', source.accountId, first.review);
+    const second = await prepareReview(source, fixtureReviewer, await store.getReview('demo-tenant', source.accountId));
     expect(first.review.drift.direction).toBe('baseline');
     expect(second.review.drift).toEqual({
       previousScore: first.review.assessment.score,
       scoreDelta: 0,
       direction: 'stable',
     });
+    store.close();
   });
 
   it('redacts support subjects and CRM note contents before model generation', async () => {
-    const redacted = redactSnapshot(await snapshot());
+    const redacted = redact(await snapshot());
     if (redacted.support.status !== 'available' || redacted.crm.status !== 'available') throw new Error('fixture missing');
-    expect(redacted.support.data.tickets[0]?.subject).toBe('[REDACTED]');
-    expect(redacted.crm.data.notes[0]).toMatchObject({ authorId: null, body: '[REDACTED]' });
+    expect(redacted.support.data[0]?.subject).toBe('[REDACTED]');
+    expect(redacted.crm.data[0]?.body).toBe('[REDACTED]');
   });
 
   it('maps bundled fixture data into a custom runtime tenant', async () => {
-    const connectors = new FixtureConnector(resolve('data/fixtures/accounts.json'), 'demo-tenant');
+    const connectors = new FixtureConnector(resolve('data/fixtures/accounts.json'));
     const source = await collectAccountData(connectors, 'customer-tenant', '340734348989', window);
-    expect(source.usage).toMatchObject({ status: 'available', data: { tenantId: 'customer-tenant' } });
-    expect(source.billing).toMatchObject({ status: 'available', data: { tenantId: 'customer-tenant' } });
+    expect(source).toMatchObject({ tenantId: 'customer-tenant', usage: { status: 'available' }, billing: { status: 'available' } });
+  });
+
+  it('compares offset timestamps by instant', async () => {
+    const source = await collectAccountData(
+      new FixtureConnector(resolve('data/fixtures/accounts.json')),
+      'demo-tenant',
+      '340737895140',
+      { start: '2026-08-17T08:30:00.000Z', end: '2026-08-17T11:00:00.000Z' },
+    );
+    expect(source.usage).toEqual({ status: 'empty' });
+  });
+
+  it('normalizes reviews and snapshots persisted by the previous template', async () => {
+    const current = await snapshot();
+    if (current.usage.status !== 'available' || current.support.status !== 'available' || current.crm.status !== 'available') {
+      throw new Error('fixture missing');
+    }
+    const legacySnapshot = {
+      ...current,
+      usage: { status: 'available', data: { tenantId: current.tenantId, accountId: current.accountId, window: current.window, points: current.usage.data } },
+      support: { status: 'available', data: { tenantId: current.tenantId, accountId: current.accountId, window: current.window, tickets: current.support.data } },
+      crm: { status: 'available', data: { tenantId: current.tenantId, accountId: current.accountId, window: current.window, notes: current.crm.data } },
+    };
+    expect(snapshotSchema.parse(legacySnapshot)).toEqual(current);
+
+    const review = (await prepareReview(current, fixtureReviewer, null)).review;
+    const legacyReview = {
+      assessment: {
+        ...review.assessment,
+        tenantId: current.tenantId,
+        accountId: current.accountId,
+        asOf: review.asOf,
+        sourceHash: review.sourceHash,
+        riskFactors: review.assessment.risks.map(risk => ({ ...risk, status: 'new' })),
+        dataCompleteness: review.assessment.completeness,
+      },
+      drift: review.drift,
+      plan: { objective: 'Previous objective', actions: review.plan.actions },
+      outreach: {
+        ...review.outreach,
+        claims: review.outreach.claims.map(claim => ({ ...claim, text: 'Previous claim text' })),
+        channel: 'email',
+        draftOnly: true,
+      },
+    };
+    expect(reviewSchema.parse(legacyReview)).toEqual(review);
   });
 });
