@@ -124,3 +124,4 @@ console.log(
     2,
   ),
 );
+await runtime.cleanup();

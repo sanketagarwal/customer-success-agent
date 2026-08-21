@@ -1,4 +1,6 @@
-import { resolve } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
@@ -56,12 +58,24 @@ export async function createFixtureRuntime(
     },
     accountWorkflow,
   );
-  const storage = new LibSQLStore({ id: 'fixture-runtime-storage', url: 'file::memory:?cache=shared' });
+  const storageDirectory = await mkdtemp(join(tmpdir(), 'mastra-customer-success-'));
+  const storage = new LibSQLStore({
+    id: 'fixture-runtime-storage',
+    url: `file:${join(storageDirectory, 'workflow.db')}`,
+  });
   const mastra = new Mastra({
     storage,
     workflows: { accountWorkflow, scheduledWorkflow },
   });
   await mastra.getStorage()?.init();
+  let cleanedUp = false;
+  const cleanup = async () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    await mastra.getStorage()?.close();
+    await storage.close();
+    await rm(storageDirectory, { recursive: true, force: true });
+  };
   return {
     asOf,
     clock,
@@ -74,5 +88,6 @@ export async function createFixtureRuntime(
     scheduledWorkflow,
     storage,
     mastra,
+    cleanup,
   };
 }

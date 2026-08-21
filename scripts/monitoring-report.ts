@@ -40,3 +40,4 @@ if (
 ) {
   throw new Error('Fixture monitoring report did not contain the expected metrics');
 }
+await runtime.cleanup();
