@@ -1,43 +1,26 @@
-import { createFixtureRuntime } from '../src/mastra/adapters/fixture/fixture-runtime.js';
-import { buildCustomerSuccessMonitoringReport } from '../src/mastra/monitoring/customer-success-report.js';
+import { createFixtureRuntime } from '../src/mastra/runtime.js';
+import { monitoringSummary } from '../src/mastra/state.js';
+import { accountInputSchema } from '../src/mastra/workflows.js';
 
 const runtime = await createFixtureRuntime();
-const tenantId = 'demo-tenant';
-const accounts = await runtime.fixtures.listAccounts(tenantId);
-const prepared = await Promise.all(
-  accounts.map(account =>
-    runtime.service.prepare({
-      runId: `monitor-${account.accountId}`,
-      tenantId,
-      accountId: account.accountId,
-      asOf: runtime.asOf,
-    }),
-  ),
-);
-const risk = prepared.find(run => run.outcome === 'awaiting_approval');
-if (!risk?.artifactHash || !risk.assessment) throw new Error('Monitoring approval fixture missing');
-await runtime.service.finalize(risk, {
-  decision: 'approved',
-  approverId: 'fixture-csm-priya',
-  decidedAt: runtime.asOf,
-  expiresAt: '2026-08-24T09:00:00.000Z',
-  boundToHash: risk.artifactHash,
-  boundToAsOf: risk.assessment.asOf,
-  feedback: 'Monitoring fixture approval feedback.',
-});
-
-const events = await runtime.store.listMonitoringEvents(tenantId);
-const report = buildCustomerSuccessMonitoringReport(tenantId, events, runtime.asOf);
-console.log(JSON.stringify(report, null, 2));
-
-if (
-  report.totals.assessmentRuns !== accounts.length ||
-  report.totals.approvalDecisions !== 1 ||
-  report.totals.outreachApprovals !== 1 ||
-  report.totals.acceptedRecommendations === 0 ||
-  report.totals.humanFeedbackCount !== 1 ||
-  report.totals.costUsd !== 0
-) {
-  throw new Error('Fixture monitoring report did not contain the expected metrics');
+try {
+  const run = await runtime.accountWorkflow.createRun({ runId: 'monitoring-demo' });
+  await run.start({ inputData: accountInputSchema.parse({}) });
+  await run.resume({
+    step: 'request-csm-approval',
+    resumeData: { decision: 'approved', approverId: 'demo-csm', feedback: 'Approved.' },
+  });
+  const summary = monitoringSummary(await runtime.state.events('demo-tenant'));
+  console.log(JSON.stringify(summary, null, 2));
+  if (
+    summary.totals.reviews !== 1 ||
+    summary.totals.approvals !== 1 ||
+    summary.totals.outreachApprovals !== 1 ||
+    !summary.totals.humanFeedback ||
+    summary.accounts[0]?.riskScore == null
+  ) {
+    throw new Error('Monitoring demo did not record the expected metrics');
+  }
+} finally {
+  await runtime.cleanup();
 }
-await runtime.cleanup();

@@ -1,25 +1,16 @@
 # Customer Success Agent
 
-A scheduled agent that finds at-risk customer accounts before renewal and
-coordinates the follow-up. It reads product usage, support history, billing
-status, and CRM notes; creates a health assessment and account plan; drafts
-outreach; waits for CSM approval; then records approved notes and tasks in the
-configured CRM.
+A scheduled agent that finds accounts at risk before renewal and coordinates the follow-up. It reads product usage, support, billing, and CRM data; prepares a health assessment, account plan, and outreach draft; waits for CSM approval; then creates the CRM note and follow-up tasks.
 
 ## Demo
 
-This demo runs in Mastra Studio, but you can connect the workflow to your React,
-Next.js, or Vue app using the Mastra Client SDK or agentic UI libraries like AI
-SDK UI, CopilotKit, or Assistant UI.
-
-The included fixtures let you try the complete flow without connecting customer
-systems. An OpenAI model generates the assessment, plan, and outreach.
+The template runs end to end in Mastra Studio with included fixtures. No customer systems are required.
 
 ## Prerequisites
 
 - Node.js 22.13 or newer
+- npm
 - An OpenAI API key
-- Git with access to this GitHub repository
 
 ## Quickstart 🚀
 
@@ -30,59 +21,42 @@ cp .env.example .env
 npm install
 ```
 
-After this template is published in Mastra's catalog, it can be installed with
-`npx create-mastra@latest customer-success-agent --template customer-success-agent`
-instead.
-
-Add `OPENAI_API_KEY` to `.env`, then start Mastra Studio:
+Add `OPENAI_API_KEY` to `.env`, then run:
 
 ```bash
 npm run dev
 ```
 
-Open [localhost:4111](http://localhost:4111).
+Open [localhost:4111](http://localhost:4111), select **Workflows → customer-success-account**, and click **Run**. The at-risk fixture account is prefilled.
 
-## Using it
+The workflow has four steps:
 
-Open **Workflows**, select `customer-success-account`, and click **Run**. The
-fixture account ID is already filled in.
+1. Collect account data
+2. Prepare the complete review
+3. Request CSM approval
+4. Update the CRM and create follow-up tasks
 
-The workflow reads each source, prepares the assessment, plan, and outreach,
-then pauses at `request-csm-approval`. Approve it as `demo-csm` to create the
-internal CRM note and follow-up tasks. The outreach remains a draft and is not
-sent automatically.
+Approve as `demo-csm`. The completed run output contains the fixture CRM note and task IDs. Nothing is sent to a customer automatically.
 
-`weekly-customer-success` runs the same review for every account returned by
-the configured CRM connector.
+`weekly-customer-success` performs the same risk review across the CRM account list on schedule. Risky accounts are returned as `awaiting_approval`; run the account workflow to review and approve one.
 
-## Connecting real data
+## HubSpot demo
 
-The demo reads from `data/fixtures/accounts.json`. To use your own systems,
-implement the interfaces in `src/mastra/ports/index.ts` and connect them in
-`src/mastra/composition/create-connectors.ts`. Product usage, support, billing,
-CRM reads, and CRM writes can be replaced independently.
+To write the approved note and tasks to HubSpot, update `.env`:
 
-HubSpot is included as an optional CRM adapter. Set `CRM_PROVIDER=hubspot` and
-`HUBSPOT_PRIVATE_APP_TOKEN` to enable it. This replaces only CRM reads and
-writes; the HubSpot company ID must match the remaining fixtures, or you must
-replace the usage, support, and billing connectors too.
+```bash
+CRM_PROVIDER=hubspot
+HUBSPOT_PRIVATE_APP_TOKEN=your-private-app-token
+```
+
+Restart Studio and run a company ID that also exists in `data/fixtures/accounts.json`, such as `340734348989`. After approval, open that company in HubSpot to see the internal note and associated tasks.
+
+This is intentionally a hybrid demo: usage, support, and billing remain fixture-backed while CRM reads and writes use HubSpot. The connector boundary in `src/mastra/connectors.ts` lets you replace each source independently.
 
 ## Making it yours
 
-- Connect the data sources and CRM your company uses.
-- Adjust the risk rules, review schedule, and account-plan actions.
-- Move CSM approval into your application or CRM.
-- Extend the included evals and monitoring for your production data.
+- Replace fixture methods in `src/mastra/connectors.ts` with your APIs or database queries.
+- Use `src/mastra/hubspot.ts` as an example, not a required CRM.
+- Adjust the schedule, model, memory, and risk behavior through `.env` and `src/mastra/reviewer.ts`.
 
-Implementation details are documented in
-[Mastra primitives](./docs/mastra-primitives.md), [evals](./docs/evals.md), and
-[monitoring](./docs/monitoring.md).
-
-## About Mastra templates
-
-Mastra templates are ready-to-use projects that show what you can build. Use
-the generated repository as your starting point, then customize it for your
-application.
-
-Want to contribute? See the
-[Mastra contributing guide](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md).
+See [Mastra primitives](./docs/mastra-primitives.md), [evals](./docs/evals.md), and [monitoring](./docs/monitoring.md) for implementation details.

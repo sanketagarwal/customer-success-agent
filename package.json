@@ -15,9 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run validate",
     "demo": "tsx scripts/run-fixtures.ts",
-    "demo:model-memory": "tsx scripts/run-model-memory.ts",
     "evals": "tsx scripts/run-evals.ts",
     "monitoring:report": "tsx scripts/monitoring-report.ts",
     "validate": "npm run typecheck && npm test && npm run evals && npm run demo && npm run monitoring:report && npm run build"
