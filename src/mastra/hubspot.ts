@@ -78,7 +78,7 @@ export class HubSpotConnector
       }
       if (attempt + 1 < attempts) await new Promise(resolve => setTimeout(resolve, 250 * 2 ** attempt));
     }
-    throw new Error('HubSpot request failed', { cause: failure });
+    throw failure instanceof Error ? failure : new Error('HubSpot request failed');
   }
 
   async listAccounts(tenantId: string) {
@@ -140,6 +140,7 @@ export class HubSpotConnector
   async writeToCrm(input: CrmWriteInput) {
     this.assertTenant(input.tenantId);
     const marker = `[customer-success:${input.runId}]`;
+    const intent = `hubspot:${input.tenantId}:${input.accountId}:${input.runId}`;
     const [notes, tasks] = await Promise.all([
       this.readAssociated(input.accountId, 'notes', ['hs_timestamp', 'hs_note_body']),
       this.readAssociated(input.accountId, 'tasks', ['hs_task_body']),
@@ -154,35 +155,33 @@ export class HubSpotConnector
     );
 
     const associationTypeId = await this.getTaskAssociationType();
-    const taskIds = await Promise.all(
-      input.review.plan.actions.map(async action => {
-        const key = `${marker}:task:${action.id}`;
-        const result = await this.writeOnce(
-          key,
-          existingTasks.get(action.id),
-          async () => objectSchema.parse(await this.request('/crm/v3/objects/tasks', {
-            method: 'POST',
-            body: JSON.stringify({
-              properties: {
-                hs_timestamp: action.dueAt,
-                hs_task_subject: action.title,
-                hs_task_body: `${marker}[action:${action.id}]\n${action.rationale}`,
-                hs_task_status: 'NOT_STARTED',
-                hs_task_priority: action.priority.toUpperCase(),
-                hs_task_type: 'TODO',
-              },
-              associations: [{
-                to: { id: input.accountId },
-                types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId }],
-              }],
-            }),
-          }, false)).id,
-          async () => (await this.readAssociated(input.accountId, 'tasks', ['hs_task_body']))
-            .find(task => task.properties.hs_task_body?.includes(`${marker}[action:${action.id}]`))?.id,
-        );
-        return result.id;
-      }),
-    );
+    const taskIds = [];
+    for (const action of input.review.plan.actions) {
+      const result = await this.writeOnce(
+        `${intent}:task:${action.id}`,
+        existingTasks.get(action.id),
+        async () => objectSchema.parse(await this.request('/crm/v3/objects/tasks', {
+          method: 'POST',
+          body: JSON.stringify({
+            properties: {
+              hs_timestamp: action.dueAt,
+              hs_task_subject: action.title,
+              hs_task_body: `${marker}[action:${action.id}]\n${action.rationale}`,
+              hs_task_status: 'NOT_STARTED',
+              hs_task_priority: action.priority.toUpperCase(),
+              hs_task_type: 'TODO',
+            },
+            associations: [{
+              to: { id: input.accountId },
+              types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId }],
+            }],
+          }),
+        }, false)).id,
+        async () => (await this.readAssociated(input.accountId, 'tasks', ['hs_task_body']))
+          .find(task => task.properties.hs_task_body?.includes(`${marker}[action:${action.id}]`))?.id,
+      );
+      taskIds.push(result.id);
+    }
 
     const { assessment, plan, outreach } = input.review;
     const body = [
@@ -197,7 +196,7 @@ export class HubSpotConnector
       `<p>${escapeHtml(outreach.body)}</p>`,
     ].join('\n');
     const note = await this.writeOnce(
-      `${marker}:note`,
+      `${intent}:note`,
       existingNote?.id,
       async () => objectSchema.parse(await this.request('/crm/v3/objects/notes', {
           method: 'POST',
@@ -245,7 +244,7 @@ export class HubSpotConnector
         await this.options.writes.completeWrite(key, recovered);
         return { id: recovered, created: true };
       }
-      if (error instanceof Error && /^HubSpot 4(?!29)/.test(error.message)) {
+      if (error instanceof Error && /^HubSpot 4/.test(error.message)) {
         await this.options.writes.releaseWrite(key);
       }
       throw error;

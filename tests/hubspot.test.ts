@@ -25,6 +25,7 @@ describe('HubSpot connector', () => {
     const tasks: Array<{ id: string; createdAt: string; properties: Record<string, string> }> = [];
     let hideTasks = false;
     let loseTaskResponse = false;
+    let throttleNextTask = false;
     let taskDelayMs = 0;
     const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input));
@@ -52,6 +53,10 @@ describe('HubSpot connector', () => {
         return json({ results: [{ typeId: 192, category: 'HUBSPOT_DEFINED', label: null }] });
       }
       if (url.pathname === '/crm/v3/objects/tasks' && init?.method === 'POST') {
+        if (throttleNextTask) {
+          throttleNextTask = false;
+          return json({ message: 'rate limited' }, 429);
+        }
         if (taskDelayMs) await new Promise(resolveDelay => setTimeout(resolveDelay, taskDelayMs));
         const task = { id: `task-${tasks.length + 1}`, createdAt: '2026-08-17T09:00:00.000Z', properties: body.properties };
         tasks.push(task);
@@ -116,7 +121,8 @@ describe('HubSpot connector', () => {
     const countAfterAmbiguousCommit = tasks.length;
     hideTasks = false;
     await expect(hubspot.writeToCrm({ ...input, runId: 'delayed-association' })).resolves.toMatchObject({ created: true });
-    expect(tasks).toHaveLength(countAfterAmbiguousCommit);
+    const countAfterRecovery = countAfterAmbiguousCommit + review.plan.actions.length - 1;
+    expect(tasks).toHaveLength(countAfterRecovery);
 
     taskDelayMs = 20;
     const concurrentInput = { ...input, runId: 'concurrent-run' };
@@ -126,6 +132,12 @@ describe('HubSpot connector', () => {
     ]);
     expect(concurrent.filter(result => result.status === 'fulfilled')).toHaveLength(1);
     expect(concurrent.filter(result => result.status === 'rejected')).toHaveLength(1);
-    expect(tasks).toHaveLength(countAfterAmbiguousCommit + review.plan.actions.length);
+    expect(tasks).toHaveLength(countAfterRecovery + review.plan.actions.length);
+
+    throttleNextTask = true;
+    const throttledInput = { ...input, runId: 'throttled-run' };
+    await expect(hubspot.writeToCrm(throttledInput)).rejects.toThrow('HubSpot 429');
+    await expect(hubspot.writeToCrm(throttledInput)).resolves.toMatchObject({ created: true });
+    expect(tasks).toHaveLength(countAfterRecovery + review.plan.actions.length * 2);
   });
 });
