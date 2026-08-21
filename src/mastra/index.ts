@@ -23,7 +23,6 @@ export const mastra = new Mastra({
     customerSuccessAccountWorkflow,
     weeklyCustomerSuccessWorkflow,
   },
-  // createTool types execute as optional; every registered tool above supplies it.
   tools: runtime.tools as unknown as Record<string, ToolAction<any, any>>,
   scorers: {
     unsupportedClaimScorer,

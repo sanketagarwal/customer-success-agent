@@ -13,4 +13,4 @@
 | CRM tools | Connector-neutral list, read, and approval-gated write tools are registered in Studio. |
 | Observability | Mastra traces are stored locally with sensitive CRM and outreach fields filtered. |
 
-The workflow is defined in `src/mastra/workflows.ts`; agent memory and generation are in `src/mastra/reviewer.ts`.
+The workflow is defined in `src/mastra/workflows.ts`; agent memory and generation are in `src/mastra/review.ts`.

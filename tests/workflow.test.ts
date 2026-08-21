@@ -1,13 +1,13 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createFixtureRuntime } from '../src/mastra/runtime.js';
 import { monitoringSummary } from '../src/mastra/state.js';
 import { accountInputSchema, approvalSchema, executeScheduledReviews } from '../src/mastra/workflows.js';
+import { testRuntime } from './fixtures.js';
 
-const runtimes: Awaited<ReturnType<typeof createFixtureRuntime>>[] = [];
+const runtimes: Awaited<ReturnType<typeof testRuntime>>[] = [];
 const runtime = async () => {
-  const value = await createFixtureRuntime();
+  const value = await testRuntime();
   runtimes.push(value);
   return value;
 };

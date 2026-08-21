@@ -1,9 +1,9 @@
 # Evals
 
-Run the deterministic eval gate with:
+The test suite runs the deterministic eval gate:
 
 ```bash
-npm run evals
+npm test
 ```
 
 The registered Mastra scorers cover:
@@ -14,4 +14,4 @@ The registered Mastra scorers cover:
 - outreach personalization
 - action relevance
 
-Positive fixtures must score `1`; deliberately unsupported, irrelevant, or generic outputs must score `0`. The definitions live in `src/mastra/scorers.ts` and are also available from Studio.
+Positive fixtures must score `1`; deliberately unsupported, irrelevant, generic, or misrouted outputs must score `0`. The scorers are registered in Studio and defined in `src/mastra/scorers.ts`.

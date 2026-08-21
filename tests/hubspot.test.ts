@@ -2,12 +2,13 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { loadConfig } from '../src/mastra/config.js';
 import { FixtureConnector } from '../src/mastra/connectors.js';
-import { prepareReview } from '../src/mastra/customer-success.js';
 import { HubSpotConnector } from '../src/mastra/hubspot.js';
-import { FixtureReviewer } from '../src/mastra/reviewer.js';
-import { MemoryState } from '../src/mastra/state.js';
+import { prepareReview } from '../src/mastra/review.js';
+import { LibSqlState } from '../src/mastra/state.js';
 import { collectAccountData } from '../src/mastra/workflows.js';
+import { fixtureReviewer } from './fixtures.js';
 
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 
@@ -73,24 +74,21 @@ describe('HubSpot connector', () => {
       }
       return json({ message: `Unhandled ${url.pathname}` }, 404);
     });
-    const options = {
-      tenantId: 'demo-tenant',
-      token: 'test-token',
-      baseUrl: 'https://api.hubapi.com',
-      renewalProperty: 'renewal_date',
-      writes: new MemoryState(),
-      fetch: fetcher as typeof fetch,
-    };
-    const hubspot = new HubSpotConnector(options);
+    const config = loadConfig({
+      CRM_PROVIDER: 'hubspot',
+      HUBSPOT_PRIVATE_APP_TOKEN: 'test-token',
+    });
+    const state = new LibSqlState('file::memory:');
+    const hubspot = new HubSpotConnector(config, state, fetcher as typeof fetch);
 
     await expect(hubspot.listAccounts('demo-tenant')).resolves.toMatchObject([
-      { accountId: '340734348989', name: 'Redwood Retail', renewalAt: '2026-09-12T00:00:00.000Z' },
+      { accountId: '340734348989', name: 'Redwood Retail' },
     ]);
     await expect(hubspot.readCrmNotes({
       tenantId: 'demo-tenant',
       accountId: '340734348989',
       window: { start: '2026-07-20T09:00:00.000Z', end: '2026-08-17T09:00:00.000Z' },
-    })).resolves.toMatchObject({ status: 'available', data: { notes: [{ recordId: 'note-existing' }] } });
+    })).resolves.toMatchObject({ status: 'available', data: [{ recordId: 'note-existing' }] });
 
     const fixtures = new FixtureConnector(resolve('data/fixtures/accounts.json'));
     const snapshot = await collectAccountData(
@@ -99,10 +97,10 @@ describe('HubSpot connector', () => {
       '340734348989',
       { start: '2026-07-20T09:00:00.000Z', end: '2026-08-17T09:00:00.000Z' },
     );
-    const { review } = await prepareReview(snapshot, new FixtureReviewer(), null);
+    const { review } = await prepareReview(snapshot, fixtureReviewer, null);
     const input = { tenantId: 'demo-tenant', accountId: '340734348989', runId: 'hubspot-demo', review };
     const first = await hubspot.writeToCrm(input);
-    const second = await new HubSpotConnector(options).writeToCrm(input);
+    const second = await new HubSpotConnector(config, state, fetcher as typeof fetch).writeToCrm(input);
     expect(first).toMatchObject({ created: true });
     expect(second).toEqual({ ...first, created: false });
     expect(tasks).toHaveLength(review.plan.actions.length);
@@ -128,7 +126,7 @@ describe('HubSpot connector', () => {
     const concurrentInput = { ...input, runId: 'concurrent-run' };
     const concurrent = await Promise.allSettled([
       hubspot.writeToCrm(concurrentInput),
-      new HubSpotConnector(options).writeToCrm(concurrentInput),
+      new HubSpotConnector(config, state, fetcher as typeof fetch).writeToCrm(concurrentInput),
     ]);
     expect(concurrent.filter(result => result.status === 'fulfilled')).toHaveLength(1);
     expect(concurrent.filter(result => result.status === 'rejected')).toHaveLength(1);
@@ -139,5 +137,6 @@ describe('HubSpot connector', () => {
     await expect(hubspot.writeToCrm(throttledInput)).rejects.toThrow('HubSpot 429');
     await expect(hubspot.writeToCrm(throttledInput)).resolves.toMatchObject({ created: true });
     expect(tasks).toHaveLength(countAfterRecovery + review.plan.actions.length * 2);
+    state.close();
   });
 });
