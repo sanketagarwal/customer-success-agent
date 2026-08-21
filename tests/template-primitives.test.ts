@@ -1,5 +1,5 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createFixtureRuntime } from '../src/mastra/adapters/fixture/fixture-runtime.js';
 import { createConnectors } from '../src/mastra/composition/create-connectors.js';
@@ -11,13 +11,25 @@ import { createCrmTools } from '../src/mastra/tools/crm-tools.js';
 import { accountRunInputSchema, approvalResumeSchema } from '../src/mastra/workflows/account-workflow.js';
 import { scheduledInputSchema } from '../src/mastra/workflows/scheduled-workflow.js';
 
+const fixtureRuntimes: Array<Awaited<ReturnType<typeof createFixtureRuntime>>> = [];
+
+async function createTestFixtureRuntime() {
+  const runtime = await createFixtureRuntime();
+  fixtureRuntimes.push(runtime);
+  return runtime;
+}
+
+afterEach(async () => {
+  for (const runtime of fixtureRuntimes.splice(0)) await runtime.cleanup();
+});
+
 describe('template primitives', () => {
   it('uses model-backed generation for the Studio runtime by default', () => {
     expect(loadConfig({}).generationMode).toBe('model');
   });
 
-  it('allows every data source to be replaced independently', () => {
-    const runtime = createFixtureRuntime();
+  it('allows every data source to be replaced independently', async () => {
+    const runtime = await createTestFixtureRuntime();
     const store = new LibSqlOperationalStore(':memory:');
     try {
       const connectors = createConnectors(loadConfig({ CRM_PROVIDER: 'fixture', MASTRA_DB_URL: ':memory:' }), store, {
@@ -42,8 +54,8 @@ describe('template primitives', () => {
     }
   });
 
-  it('registers connector-neutral CRM tools', () => {
-    const runtime = createFixtureRuntime();
+  it('registers connector-neutral CRM tools', async () => {
+    const runtime = await createTestFixtureRuntime();
     const tools = createCrmTools(runtime.fixtures, runtime.writer);
     expect(tools.listCustomerAccounts.id).toBe('list-customer-accounts');
     expect(tools.readCustomerCrmNotes.id).toBe('read-customer-crm-notes');
@@ -51,8 +63,8 @@ describe('template primitives', () => {
     expect(tools.writeApprovedCustomerSuccessDraft.requireApproval).toBe(true);
   });
 
-  it('exposes source reads, processing, approval, and CRM writes as workflow steps', () => {
-    const runtime = createFixtureRuntime();
+  it('exposes source reads, processing, approval, and CRM writes as workflow steps', async () => {
+    const runtime = await createTestFixtureRuntime();
     expect(Object.keys(runtime.accountWorkflow.steps)).toEqual(
       expect.arrayContaining([
         'initialize-account-review',
@@ -84,7 +96,7 @@ describe('template primitives', () => {
   });
 
   it('runs the at-risk demo account from the Studio schema default', async () => {
-    const runtime = createFixtureRuntime();
+    const runtime = await createTestFixtureRuntime();
     const run = await runtime.accountWorkflow.createRun({ runId: 'studio-one-click' });
     const result = await run.start({ inputData: accountRunInputSchema.parse({}) });
     expect(result.status).toBe('suspended');
@@ -96,8 +108,24 @@ describe('template primitives', () => {
     expect(result.steps['request-csm-approval']?.status).toBe('suspended');
   });
 
+  it('isolates workflow snapshots between fixture runtimes', async () => {
+    const first = await createTestFixtureRuntime();
+    const second = await createTestFixtureRuntime();
+    const run = await first.accountWorkflow.createRun({ runId: 'isolated-fixture-run' });
+    const result = await run.start({ inputData: { accountId: '340734348989' } });
+    expect(result.status).toBe('suspended');
+
+    const secondWorkflowStore = await second.mastra.getStorage()?.getStore('workflows');
+    await expect(
+      secondWorkflowStore?.loadWorkflowSnapshot({
+        workflowName: 'customer-success-account',
+        runId: 'isolated-fixture-run',
+      }),
+    ).resolves.toBeNull();
+  });
+
   it('uses Mastra step retries before returning unknown_retry', async () => {
-    const runtime = createFixtureRuntime();
+    const runtime = await createTestFixtureRuntime();
     const supportReads = vi.spyOn(runtime.service, 'readSupport');
     const run = await runtime.accountWorkflow.createRun({ runId: 'retry-fixture' });
     const result = await run.start({
@@ -116,7 +144,7 @@ describe('template primitives', () => {
   });
 
   it('retries each model-backed generation stage independently', async () => {
-    const runtime = createFixtureRuntime();
+    const runtime = await createTestFixtureRuntime();
     const originalAssess = runtime.service.assessHealth.bind(runtime.service);
     const originalPlan = runtime.service.createPlan.bind(runtime.service);
     const originalDraft = runtime.service.draftOutreach.bind(runtime.service);
@@ -143,7 +171,7 @@ describe('template primitives', () => {
   });
 
   it('binds approval identity to RequestContext when supplied', async () => {
-    const runtime = createFixtureRuntime();
+    const runtime = await createTestFixtureRuntime();
     const run = await runtime.accountWorkflow.createRun({ runId: 'context-approval' });
     const suspended = await run.start({
       inputData: {
@@ -172,7 +200,7 @@ describe('template primitives', () => {
   });
 
   it('aggregates drift, decisions, costs, latency, and feedback by account', async () => {
-    const runtime = createFixtureRuntime();
+    const runtime = await createTestFixtureRuntime();
     const prepared = await runtime.service.prepare({
       runId: 'monitoring-test',
       tenantId: 'demo-tenant',
@@ -208,7 +236,7 @@ describe('template primitives', () => {
   });
 
   it('persists monitoring events through the LibSQL operational store', async () => {
-    const runtime = createFixtureRuntime();
+    const runtime = await createTestFixtureRuntime();
     await runtime.service.prepare({
       runId: 'libsql-monitor-source',
       tenantId: 'demo-tenant',

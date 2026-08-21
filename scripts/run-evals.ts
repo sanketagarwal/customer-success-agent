@@ -7,7 +7,7 @@ import {
   riskFactorExtractionScorer,
 } from '../src/mastra/scorers/index.js';
 
-const runtime = createFixtureRuntime();
+const runtime = await createFixtureRuntime();
 const tenantId = 'demo-tenant';
 const window = {
   start: new Date(Date.parse(runtime.asOf) - 28 * 86_400_000).toISOString(),
@@ -94,3 +94,4 @@ console.log(JSON.stringify({ thresholds: { positive: 1, negative: 0 }, positiveS
 if (failedPositive.length > 0 || failedNegative.length > 0) {
   throw new Error(`Eval gates failed: ${JSON.stringify({ failedPositive, failedNegative })}`);
 }
+await runtime.cleanup();
