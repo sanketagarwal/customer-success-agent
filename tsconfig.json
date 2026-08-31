@@ -15,11 +15,7 @@
     "outDir": "dist",
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
-    "types": ["node", "vitest/globals"]
+    "types": ["node"]
   },
-  "include": [
-    "src/**/*",
-    "tests/**/*",
-    "scripts/**/*"
-  ]
+  "include": ["src/**/*", "scripts/**/*"]
 }

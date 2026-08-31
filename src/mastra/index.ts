@@ -1,38 +1,34 @@
 import { Mastra } from '@mastra/core/mastra';
-import type { ToolAction } from '@mastra/core/tools';
+import { LibSQLStore } from '@mastra/libsql';
 import { MastraStorageExporter, Observability, SensitiveDataFilter } from '@mastra/observability';
-
-import { createComposition } from './composition/create-composition.js';
+import { createCustomerSuccessAgent } from './agent.js';
 import { loadConfig } from './config.js';
-import {
-  accountPlanQualityScorer,
-  actionRelevanceScorer,
-  groundednessScorer,
-  personalizationScorer,
-  riskFactorExtractionScorer,
-} from './scorers/index.js';
-import { createAccountWorkflow } from './workflows/account-workflow.js';
-import { createScheduledWorkflow } from './workflows/scheduled-workflow.js';
-
-export const composition = createComposition(loadConfig());
-export const customerSuccessAccountWorkflow = createAccountWorkflow(composition);
+import { createDataSource } from './data.js';
+import { ReviewHistory } from './history.js';
+import { accountPlanQualityScorer, actionRelevanceScorer, personalizationScorer, riskFactorExtractionScorer, unsupportedClaimScorer } from './scorers.js';
+import { createCustomerTools } from './tools.js';
+import { createAccountWorkflow } from './workflows/account.js';
+import { createScheduledWorkflow } from './workflows/scheduled.js';
+const config = loadConfig();
+const storage = new LibSQLStore({ id: 'customer-success-storage', url: config.databaseUrl, ...(config.tursoAuthToken ? { authToken: config.tursoAuthToken } : {}) });
+const data = createDataSource(config);
+const history = new ReviewHistory(config.databaseUrl, config.tursoAuthToken);
+const tools = createCustomerTools(data, history);
+export const customerSuccessAgent = createCustomerSuccessAgent(config, storage, tools);
+export const customerSuccessAccountWorkflow = createAccountWorkflow(data, history, customerSuccessAgent, config);
 export const weeklyCustomerSuccessWorkflow = createScheduledWorkflow(
-  composition,
+  data,
   customerSuccessAccountWorkflow,
+  config,
 );
-
 export const mastra = new Mastra({
-  storage: composition.storage,
-  agents: { customerSuccessAgent: composition.agent },
+  storage,
+  agents: { customerSuccessAgent },
   workflows: { customerSuccessAccountWorkflow, weeklyCustomerSuccessWorkflow },
-  // createTool instances are valid ToolActions at runtime; this cast works around
-  // the optional execute property exposed by the current @mastra/core declaration
-  // under TypeScript's exactOptionalPropertyTypes mode.
-  tools: composition.crmTools as unknown as Record<string, ToolAction<any, any>>,
   scorers: {
-    groundednessScorer,
     riskFactorExtractionScorer,
     accountPlanQualityScorer,
+    unsupportedClaimScorer,
     personalizationScorer,
     actionRelevanceScorer,
   },
@@ -43,16 +39,7 @@ export const mastra = new Mastra({
         exporters: [new MastraStorageExporter({ strategy: 'realtime' })],
         spanOutputProcessors: [
           new SensitiveDataFilter({
-            sensitiveFields: [
-              'authorization',
-              'token',
-              'body',
-              'subject',
-              'feedback',
-              'notes',
-              'crmNotes',
-              'email',
-            ],
+            sensitiveFields: ['authorization', 'token', 'body', 'feedback', 'email'],
           }),
         ],
         requestContextKeys: ['tenant-id', 'account-id'],
