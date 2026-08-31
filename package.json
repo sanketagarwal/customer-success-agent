@@ -13,7 +13,8 @@
     "build": "mastra build",
     "start": "mastra start",
     "typecheck": "tsc --noEmit",
-    "evals": "tsx scripts/evals.ts"
+    "evals": "tsx scripts/evals.ts",
+    "validate": "npm run typecheck && npm run evals && npm run build"
   },
   "dependencies": {
     "@libsql/client": "0.17.4",

@@ -9,6 +9,7 @@ const cases = [
   ['340739743463', 'no_action'],
   ['340734348989', 'awaiting_approval'],
   ['340737895140', 'insufficient_data'],
+  ['340878324429', 'no_action'],
 ] as const;
 const scorers = [riskFactorExtractionScorer, accountPlanQualityScorer, unsupportedClaimScorer, personalizationScorer, actionRelevanceScorer];
 const evaluated: Review[] = [];

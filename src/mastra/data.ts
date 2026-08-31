@@ -48,22 +48,30 @@ type HubSpotObject = z.infer<typeof hubspotObjectSchema>;
 class HubSpotDataSource implements CustomerDataSource {
   private taskAssociation?: Promise<number>;
   constructor(private readonly config: Config) {}
-  private async request(path: string, init?: RequestInit): Promise<unknown> {
+  private async request(path: string, init?: RequestInit, retryable = true): Promise<unknown> {
     let lastError: unknown;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    const attempts = retryable ? 3 : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      let response: Response;
       try {
-        const response = await fetch(new URL(path, this.config.hubspotBaseUrl), {
+        response = await fetch(new URL(path, this.config.hubspotBaseUrl), {
           ...init,
           headers: { Authorization: `Bearer ${this.config.hubspotToken}`, 'Content-Type': 'application/json' },
         });
-        if (response.ok) return response.status === 204 ? null : response.json();
-        const message = `HubSpot ${response.status}: ${await response.text()}`;
-        if (response.status !== 429 && response.status < 500) throw new Error(message);
-        lastError = new Error(message);
       } catch (error) {
         lastError = error;
+        if (attempt < attempts - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+        }
+        continue;
       }
-      await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+      if (response.ok) return response.status === 204 ? null : response.json();
+      const error = new Error(`HubSpot ${response.status}: ${await response.text()}`);
+      if (!retryable || (response.status !== 429 && response.status < 500)) throw error;
+      lastError = error;
+      if (attempt < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+      }
     }
     throw lastError instanceof Error ? lastError : new Error('HubSpot request failed');
   }
@@ -160,7 +168,7 @@ class HubSpotDataSource implements CustomerDataSource {
             },
             associations: associateCompany(review.accountId, associationTypeId),
           }),
-        }).then((value) => hubspotObjectSchema.parse(value)),
+        }, false).then((value) => hubspotObjectSchema.parse(value)),
       ),
     );
     const created = hubspotObjectSchema.parse(
@@ -173,7 +181,7 @@ class HubSpotDataSource implements CustomerDataSource {
           },
           associations: associateCompany(review.accountId, 190),
         }),
-      }),
+      }, false),
     );
     return { writeId: created.id, taskIds: tasks.map((task) => task.id) };
   }
@@ -254,7 +262,11 @@ export function createDataSource(config: Config): CustomerDataSource {
         },
       );
       if (!response.ok) throw new Error(`Signals API returned ${response.status}`);
-      return accountSignalsSchema.parse({ ...account, ...liveSignals.parse(await response.json()) });
+      return accountSignalsSchema.parse({
+        ...account,
+        ...liveSignals.parse(await response.json()),
+        unavailable: account.unavailable.filter((signal) => signal !== 'usage'),
+      });
     },
   };
 }
