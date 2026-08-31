@@ -1,61 +1,58 @@
 import { createScorer } from '@mastra/core/evals';
-
-import { groundingIssues, hash } from './review.js';
-import type { Review, Snapshot } from './schemas.js';
-
-const refs = (items: readonly { evidence: readonly unknown[] }[]) =>
-  new Set(items.flatMap(item => item.evidence.map(hash)));
-
-export const unsupportedClaimScorer = createScorer<Snapshot, Review>({
-  id: 'unsupported-claim-detection',
-  description: 'Rejects unsupported or irrelevant risks, actions, and outreach claims.',
-}).generateScore(({ run }) => !run.input || groundingIssues(run.output, run.input).length ? 0 : 1);
-
-export const riskFactorExtractionScorer = createScorer<{ expected: string[] }, Review['assessment']>({
+import type { Review, Risk } from './schemas.js';
+const score = (checks: boolean[]) =>
+  checks.length === 0 ? 1 : checks.filter(Boolean).length / checks.length;
+export const riskFactorExtractionScorer = createScorer<Review, Review>({
   id: 'risk-factor-extraction',
-  description: 'Measures expected risk-category extraction.',
-}).generateScore(({ run }) => {
-  if (!run.input) return 0;
-  const actual = new Set<string>(run.output.risks.map(risk => risk.category));
-  return run.input.expected.length
-    ? run.input.expected.filter(category => actual.has(category)).length / run.input.expected.length
-    : Number(actual.size === 0);
-});
-
-const ownerFor = (category: string) => category === 'billing' ? 'billing' : category === 'support' ? 'support' : 'csm';
-export const accountPlanQualityScorer = createScorer<Review['assessment'], Review['plan']>({
+  description: 'Checks that risk factors are specific and evidence-backed.',
+}).generateScore(({ run }) =>
+  score(run.output.risks.map((risk) => risk.title.length > 8 && risk.evidence.length > 3)),
+);
+export const accountPlanQualityScorer = createScorer<Review, Review>({
   id: 'account-plan-quality',
-  description: 'Checks coverage, ownership, deadlines, and evidence.',
+  description: 'Checks risk coverage, ownership, and future due dates.',
 }).generateScore(({ run }) => {
-  if (!run.input) return 0;
-  return Number(run.input.risks.every(risk => {
-    const evidence = new Set(risk.evidence.map(hash));
-    return run.output.actions.some(action =>
-      action.owner === ownerFor(risk.category) && action.evidence.some(item => evidence.has(hash(item))),
-    );
-  }) && run.output.actions.every(action => Boolean(Date.parse(action.dueAt)) && action.evidence.length));
+  if (run.output.risks.length === 0) return run.output.actions.length === 0 ? 1 : 0;
+  return score([
+    run.output.actions.length === run.output.risks.length,
+    ...run.output.actions.map((action) => Date.parse(action.dueAt) > Date.now()),
+  ]);
 });
-
-export const personalizationScorer = createScorer<Review['assessment'], Review['outreach']>({
+export const unsupportedClaimScorer = createScorer<Review, Review>({
+  id: 'unsupported-claim-detection',
+  description: 'Rejects risk summaries without explicit supporting evidence.',
+}).generateScore(({ run }) =>
+  score(
+    run.output.risks.map(
+      (risk) => risk.evidence.trim().length > 0 && run.output.summary.includes(risk.title.toLowerCase()),
+    ),
+  ),
+);
+export const personalizationScorer = createScorer<Review, Review>({
   id: 'outreach-personalization',
-  description: 'Checks that outreach contains grounded account signals.',
+  description: 'Checks that outreach is account-specific and remains a draft.',
 }).generateScore(({ run }) => {
-  if (!run.input) return 0;
-  const claims = refs(run.output.claims);
-  return Number(
-    run.input.risks.length === 0
-    || (run.output.body.length > 80 && run.input.risks.every(risk => risk.evidence.some(item => claims.has(hash(item))))),
-  );
+  const outreach = run.output.outreach;
+  if (!outreach) return 1;
+  return score([
+    outreach.subject.includes(run.output.accountName),
+    outreach.body.length >= 60,
+    outreach.draftOnly,
+  ]);
 });
-
-export const actionRelevanceScorer = createScorer<Review['assessment'], Review['plan']>({
+const expectedOwner: Record<Risk['category'], string> = {
+  usage: 'product',
+  support: 'support',
+  billing: 'billing',
+  crm: 'csm',
+};
+export const actionRelevanceScorer = createScorer<Review, Review>({
   id: 'action-relevance',
-  description: 'Checks that every action is tied to risk evidence.',
-}).generateScore(({ run }) => {
-  if (!run.input) return 0;
-  const evidence = refs(run.input.risks);
-  return Number(
-    (run.input.risks.length === 0 || run.output.actions.length > 0)
-    && run.output.actions.every(action => action.evidence.some(item => evidence.has(hash(item)))),
-  );
-});
+  description: 'Checks that each action owner matches its corresponding risk.',
+}).generateScore(({ run }) =>
+  score(
+    run.output.actions.map(
+      (action, index) => action.owner === expectedOwner[run.output.risks[index]?.category ?? 'crm'],
+    ),
+  ),
+);

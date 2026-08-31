@@ -1,170 +1,50 @@
-{
-  "accounts": [
-    {
-      "accountId": "340739743463",
-      "name": "CS Demo — Northstar Labs"
-    },
-    {
-      "accountId": "340734348989",
-      "name": "CS Demo — Redwood Retail"
-    },
-    {
-      "accountId": "340737895140",
-      "name": "CS Demo — New Harbor Co"
-    },
-    {
-      "accountId": "340878324429",
-      "name": "CS Demo — Atlas Freight"
-    }
-  ],
-  "snapshots": {
-    "340739743463": {
-      "usage": {
-        "status": "available",
-        "data": [
-          {
-            "recordId": "usage-healthy-1",
-            "timestamp": "2026-07-21T09:00:00.000Z",
-            "activeUsers": 81,
-            "adoptionRate": 0.81
-          },
-          {
-            "recordId": "usage-healthy-2",
-            "timestamp": "2026-08-16T09:00:00.000Z",
-            "activeUsers": 86,
-            "adoptionRate": 0.86
-          }
-        ]
-      },
-      "support": {
-        "status": "available",
-        "data": [
-          {
-            "recordId": "ticket-healthy-1",
-            "createdAt": "2026-08-02T10:00:00.000Z",
-            "status": "resolved",
-            "priority": "normal",
-            "subject": "Dashboard filter question"
-          }
-        ]
-      },
-      "billing": {
-        "status": "available",
-        "data": {
-          "recordId": "billing-healthy-1",
-          "asOf": "2026-08-17T08:00:00.000Z",
-          "standing": "current",
-          "renewalAt": "2026-10-15T00:00:00.000Z",
-          "daysPastDue": 0
-        }
-      },
-      "crm": {
-        "status": "available",
-        "data": [
-          {
-            "recordId": "note-healthy-1",
-            "createdAt": "2026-08-12T12:00:00.000Z",
-            "body": "Sponsor confirmed the rollout is on track and the team is seeing value.",
-            "sentiment": "positive"
-          }
-        ]
-      }
-    },
-    "340734348989": {
-      "usage": {
-        "status": "available",
-        "data": [
-          {
-            "recordId": "usage-declining-1",
-            "timestamp": "2026-07-21T09:00:00.000Z",
-            "activeUsers": 72,
-            "adoptionRate": 0.72
-          },
-          {
-            "recordId": "usage-declining-2",
-            "timestamp": "2026-08-16T09:00:00.000Z",
-            "activeUsers": 31,
-            "adoptionRate": 0.31
-          }
-        ]
-      },
-      "support": {
-        "status": "available",
-        "data": [
-          {
-            "recordId": "ticket-declining-1",
-            "createdAt": "2026-08-10T14:00:00.000Z",
-            "status": "open",
-            "priority": "urgent",
-            "subject": "Production export failures"
-          }
-        ]
-      },
-      "billing": {
-        "status": "available",
-        "data": {
-          "recordId": "billing-declining-1",
-          "asOf": "2026-08-17T08:00:00.000Z",
-          "standing": "past_due",
-          "renewalAt": "2026-09-12T00:00:00.000Z",
-          "daysPastDue": 18
-        }
-      },
-      "crm": {
-        "status": "available",
-        "data": [
-          {
-            "recordId": "note-declining-1",
-            "createdAt": "2026-08-13T11:30:00.000Z",
-            "body": "Executive sponsor is concerned about reliability and has paused the expansion discussion.",
-            "sentiment": "negative"
-          }
-        ]
-      }
-    },
-    "340737895140": {
-      "usage": {
-        "status": "available",
-        "data": [
-          {
-            "recordId": "usage-offset-1",
-            "timestamp": "2026-08-17T10:00:00+02:00",
-            "activeUsers": 1,
-            "adoptionRate": 0.1
-          }
-        ]
-      },
-      "support": { "status": "empty" },
-      "billing": { "status": "empty" },
-      "crm": { "status": "empty" }
-    },
-    "340878324429": {
-      "usage": {
-        "status": "available",
-        "data": [
-          {
-            "recordId": "usage-down-1",
-            "timestamp": "2026-08-16T09:00:00.000Z",
-            "activeUsers": 44,
-            "adoptionRate": 0.73
-          }
-        ]
-      },
-      "support": {
-        "status": "unavailable",
-        "error": "Simulated support transport outage"
-      },
-      "billing": {
-        "status": "available",
-        "data": {
-          "recordId": "billing-down-1",
-          "asOf": "2026-08-17T08:00:00.000Z",
-          "standing": "current",
-          "renewalAt": "2026-11-01T00:00:00.000Z",
-          "daysPastDue": 0
-        }
-      },
-      "crm": { "status": "empty" }
-    }
+[
+  {
+    "tenantId": "demo-tenant",
+    "accountId": "340739743463",
+    "name": "CS Demo — Northstar Labs",
+    "renewalAt": "2026-10-15T00:00:00.000Z",
+    "ownerId": "csm-alex",
+    "usage": { "previousAdoption": 0.81, "currentAdoption": 0.86 },
+    "support": { "urgentOpenTickets": 0 },
+    "billing": { "standing": "current", "daysPastDue": 0 },
+    "crm": { "sentiment": "positive" },
+    "unavailable": []
+  },
+  {
+    "tenantId": "demo-tenant",
+    "accountId": "340734348989",
+    "name": "CS Demo — Redwood Retail",
+    "renewalAt": "2026-09-12T00:00:00.000Z",
+    "ownerId": "csm-priya",
+    "usage": { "previousAdoption": 0.72, "currentAdoption": 0.31 },
+    "support": { "urgentOpenTickets": 1 },
+    "billing": { "standing": "past_due", "daysPastDue": 18 },
+    "crm": { "sentiment": "negative" },
+    "unavailable": []
+  },
+  {
+    "tenantId": "demo-tenant",
+    "accountId": "340737895140",
+    "name": "CS Demo — New Harbor Co",
+    "renewalAt": null,
+    "ownerId": "csm-alex",
+    "usage": { "previousAdoption": null, "currentAdoption": null },
+    "support": { "urgentOpenTickets": null },
+    "billing": { "standing": null, "daysPastDue": null },
+    "crm": { "sentiment": null },
+    "unavailable": []
+  },
+  {
+    "tenantId": "demo-tenant",
+    "accountId": "340878324429",
+    "name": "CS Demo — Atlas Freight",
+    "renewalAt": "2026-11-01T00:00:00.000Z",
+    "ownerId": "csm-priya",
+    "usage": { "previousAdoption": 0.76, "currentAdoption": 0.73 },
+    "support": { "urgentOpenTickets": null },
+    "billing": { "standing": "current", "daysPastDue": 0 },
+    "crm": { "sentiment": "neutral" },
+    "unavailable": ["support"]
   }
-}
+]

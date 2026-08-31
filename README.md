@@ -1,62 +1,79 @@
-# Customer Success Agent
+# Customer Success Renewal Agent
 
-A scheduled agent that finds accounts at risk before renewal and coordinates the follow-up. It reads product usage, support, billing, and CRM data; prepares a health assessment, account plan, and outreach draft; waits for CSM approval; then creates the CRM note and follow-up tasks.
+Give the workflow a customer account ID and it combines product usage, support, billing, and CRM signals into an evidence-backed health assessment, owned recovery plan, and outreach draft. At-risk plans wait for CSM approval before the agent records an internal CRM note and follow-up tasks.
 
-## Demo
+## Why we built this
 
-The template runs end to end in Mastra Studio with included fixtures. No customer systems are required.
+Renewal risk rarely lives in one system. A drop in adoption can look harmless until it appears alongside an urgent support ticket, overdue billing, and negative customer sentiment.
 
-## Prerequisites
+This template brings those signals together early enough for a customer success team to act, while keeping the assessment explainable and the final CRM update under human control.
 
-- Node.js 22.13 or newer
-- npm
-- An OpenAI API key
+## Features
 
-## Quickstart 🚀
+- Reviews usage, support, billing, and CRM signals for one customer account
+- Explains the health score with the exact risks and evidence behind it
+- Produces an owned recovery plan and customer outreach that remains a draft
+- Handles healthy accounts and missing data without inventing risk
+- Pauses at-risk reviews for CSM approval before creating CRM records
+
+## Quick start
+
+Requires Node.js 22.13 or newer.
+
+### 1. Clone the template
+
+Run:
 
 ```bash
-git clone https://github.com/sanketagarwal/customer-success-agent.git
+npx create-mastra@latest --template customer-success-agent
 cd customer-success-agent
-cp .env.example .env
-npm install
 ```
 
-Add `OPENAI_API_KEY` to `.env`, then run:
+### 2. Add your API keys
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+The included fixture demo runs without API keys. Leave `DATA_SOURCE=fixture` and `GENERATION_MODE=deterministic` for the first run.
+
+### 3. Start the dev server
 
 ```bash
 npm run dev
 ```
 
-Open [localhost:4111](http://localhost:4111), select **Workflows → customer-success-account**, and click **Run**. The at-risk fixture account is prefilled.
+Open [Mastra Studio](http://localhost:4111), select **Workflows → customer-success-account**, and run the prefilled account `340734348989`. Redwood Retail receives a 5/100 health score for falling adoption, an urgent support ticket, overdue billing, and negative sentiment. The workflow proposes four follow-up actions and an outreach draft, then pauses at `request-csm-approval` without writing to a CRM.
 
-The workflow has four steps:
+Expand the approval request to review its evidence and actions. Resume with `approved` and an approver ID such as `demo-csm`; the completed fixture run returns an internal note ID and four task IDs. The outreach remains a draft and is never sent.
 
-1. Collect account data
-2. Prepare the complete review
-3. Request CSM approval
-4. Update the CRM and create follow-up tasks
+## Try the other outcomes
 
-Approve as `demo-csm`. The completed run output contains the fixture CRM note and task IDs. Nothing is sent to a customer automatically.
+The bundled accounts cover the workflow's main decisions:
 
-`weekly-customer-success` performs the same risk review across the CRM account list on schedule. Risky accounts are returned as `awaiting_approval`; run the account workflow to review and approve one.
+| Account ID | Scenario | Expected result |
+| --- | --- | --- |
+| `340734348989` | Falling adoption, urgent support, overdue billing, and negative sentiment | Pauses for approval |
+| `340739743463` | Healthy adoption and positive account signals | Completes with `no_action` |
+| `340737895140` | Too few reliable signals | Completes with `insufficient_data` |
 
-## HubSpot demo
+Run **Workflows → weekly-customer-success** with `{}` to review the complete fixture portfolio. Healthy and insufficient-data accounts complete automatically; at-risk accounts are returned as `awaiting_approval` for individual review.
 
-To write the approved note and tasks to HubSpot, update `.env`:
+## Connect HubSpot
 
-```bash
-CRM_PROVIDER=hubspot
-HUBSPOT_PRIVATE_APP_TOKEN=your-private-app-token
-```
+Set `DATA_SOURCE=hubspot` and add `HUBSPOT_PRIVATE_APP_TOKEN` to read companies, tickets, invoices, and feedback from HubSpot. Approved reviews create an internal note and associated tasks; the workflow never calls an email-sending API.
 
-Restart Studio and run a company ID that also exists in `data/fixtures/accounts.json`, such as `340734348989`. After approval, open that company in HubSpot to see the internal note and associated tasks.
-
-This is intentionally a hybrid demo: usage, support, and billing remain fixture-backed while CRM reads and writes use HubSpot. The connector boundary in `src/mastra/connectors.ts` lets you replace each source independently.
+The private app needs read access to the relevant CRM objects plus permission to create notes and tasks. Set `HUBSPOT_RENEWAL_PROPERTY` when the portal uses a different internal property name for renewal dates. Add `SIGNALS_API_URL` and `SIGNALS_API_TOKEN` when product usage comes from a separate normalized endpoint.
 
 ## Making it yours
 
-- Replace fixture methods in `src/mastra/connectors.ts` with your APIs or database queries.
-- Use `src/mastra/hubspot.ts` as an example, not a required CRM.
-- Adjust the schedule, model, memory, and risk behavior through `.env` and `src/mastra/review.ts`.
+- Connect your product analytics and CRM systems through the existing customer data source boundary.
+- Adjust the risk thresholds, action ownership, approval policy, or portfolio schedule to match your customer success process.
 
-See [Mastra primitives](./docs/mastra-primitives.md), [evals](./docs/evals.md), and [monitoring](./docs/monitoring.md) for implementation details.
+## About Mastra templates
+
+Mastra templates are ready-to-use projects that show what you can build with Mastra. Clone one, try it in Studio, and adapt it to your use case.
+
+Want to contribute? See the [customer success template contributing guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-customer-success-agent/CONTRIBUTING.md).
