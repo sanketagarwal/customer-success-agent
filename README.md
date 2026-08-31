@@ -45,9 +45,7 @@ The included fixture demo runs without API keys. Leave `DATA_SOURCE=fixture` and
 npm run dev
 ```
 
-Open [Mastra Studio](http://localhost:4111), select **Workflows → customer-success-account**, and run the prefilled account `340734348989`. Redwood Retail receives a 5/100 health score for falling adoption, an urgent support ticket, overdue billing, and negative sentiment. The workflow proposes four follow-up actions and an outreach draft, then pauses at `request-csm-approval` without writing to a CRM.
-
-Expand the approval request to review its evidence and actions. Resume with `approved` and an approver ID such as `demo-csm`; the completed fixture run returns an internal note ID and four task IDs. The outreach remains a draft and is never sent.
+Open [Mastra Studio](http://localhost:4111), select **Workflows → customer-success-account**, and click **Run**. The workflow defaults to the credential-free Redwood Retail fixture (`340734348989`); update the account ID or `.env` settings to use another account or data provider. At-risk reviews pause for CSM approval before any CRM write.
 
 ## Try the other outcomes
 
