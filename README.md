@@ -19,20 +19,29 @@ This template brings those signals together early enough for a customer success 
 ## Prerequisites
 
 - [Node.js 22.13 or newer](https://nodejs.org/en/download)
-- No API key is required for the included fixture demo
+- A model-provider API key (`OPENAI_API_KEY` for the default `openai/gpt-5-mini`). Swap `MODEL` to another supported `provider/model-name` with tool-calling and structured-output support, and supply that provider's key.
+- A HubSpot private-app token for your customer data, or your own `CustomerDataSource` implementation.
 
 ## Quickstart
 
-1. **Clone the template**
-   - Run `npx create-mastra@latest --template customer-renewal-risk-and-recovery` to scaffold the project locally.
-2. **Set up the environment**
-   - Copy `.env.example` to `.env`. The defaults use fixture data and deterministic generation, so the demo runs without credentials.
-3. **Start the dev server**
-   - Run `npm run dev` and open [localhost:4111](http://localhost:4111). Select **Workflows → renewal-risk-review** and run the default Redwood Retail account; the account ID and data provider can be updated.
+1. Run `npx create-mastra@latest --template customer-renewal-risk-and-recovery`.
+2. Copy `.env.example` to `.env` and configure your model and data source:
 
-## Run the demo
+   ```dotenv
+   GENERATION_MODE=model
+   MODEL=openai/gpt-5-mini
+   OPENAI_API_KEY=your-provider-key
+   DATA_SOURCE=hubspot
+   HUBSPOT_PRIVATE_APP_TOKEN=your-hubspot-token
+   ```
 
-The bundled accounts cover the workflow's main decisions:
+3. Run `npm run dev`, open [localhost:4111](http://localhost:4111), and select **Workflows → renewal-risk-review**. Enter your HubSpot company ID.
+
+The model drafts outreach; the connected data source supplies customer facts.
+
+## Optional fixture demo
+
+For a credential-free workflow demo, keep `DATA_SOURCE=fixture` and `GENERATION_MODE=deterministic`. Agent chat still requires a model-provider key.
 
 | Account ID | Scenario | Expected result |
 | --- | --- | --- |
@@ -40,28 +49,19 @@ The bundled accounts cover the workflow's main decisions:
 | `340739743463` | Healthy adoption and positive account signals | Completes with `no_action` |
 | `340737895140` | Too few reliable signals | Completes with `insufficient_data` |
 
-Run **Workflows → weekly-renewal-review** with `{}` to review the complete fixture portfolio. Healthy and insufficient-data accounts complete automatically; at-risk accounts return `awaiting_approval` and their individual `runId` for review and resumption at `request-csm-approval`.
+Run **weekly-renewal-review** with `{}` for the portfolio. Resume pending approvals using the returned `runId` at `request-csm-approval`.
 
 ## Connect HubSpot
 
-Set `DATA_SOURCE=hubspot` and add `HUBSPOT_PRIVATE_APP_TOKEN` to read companies, tickets, invoices, and feedback from HubSpot. Approved reviews create an internal note and associated tasks; the workflow never calls an email-sending API.
-
-The private app needs read access to the relevant CRM objects plus permission to create notes and tasks. Set `HUBSPOT_RENEWAL_PROPERTY` when the portal uses a different internal property name for renewal dates. Add `SIGNALS_API_URL` and `SIGNALS_API_TOKEN` when product usage comes from a separate normalized endpoint.
+Grant the private app read access to companies, tickets, invoices, and feedback, plus write access for notes and tasks. Set `HUBSPOT_RENEWAL_PROPERTY` for a custom renewal field; use `SIGNALS_API_URL` and `SIGNALS_API_TOKEN` for product-usage data. Outreach is never sent.
 
 ## Making it yours
 
-Fixtures are for the local demo. Deployments should connect HubSpot or implement `CustomerDataSource` for their own systems; demo fixtures are not copied into the deployment bundle.
+Implement [CustomerDataSource](src/mastra/data.ts) for other systems, adjust [risk rules and action ownership](src/mastra/workflows/account.ts), or change `CUSTOMER_SUCCESS_CRON`. Custom adapters should checkpoint each write and use `WriteNotAppliedError` only for confirmed non-writes.
 
-- Connect your product analytics and CRM systems through the existing customer data source boundary.
-- Adjust the risk thresholds, action ownership, approval policy, or portfolio schedule to match your customer success process.
+Keep `MASTRA_DB_URL` persistent and reconcile uncertain CRM writes before retrying. On upgrades, stop old writers and reapply any schedule pause to `wf_weekly-renewal-review`. Fixtures are not bundled for deployment.
 
-Keep `MASTRA_DB_URL` on persistent storage. Each successful CRM task/note is checkpointed, so a confirmed rejected request can be retried without repeating completed writes. A timeout or other uncertain outcome stays pending until the remote records are reconciled; do not clear that claim blindly. Custom adapters should use the optional `checkpoint` callback for each write and throw `WriteNotAppliedError` only when the provider confirms the operation was not applied.
-
-Legacy customer-success workflow IDs remain available for saved runs, without adding a second schedule. The `customerSuccessAgent` API key aliases `renewalRiskAgent`; both use the same agent. Existing `cs_reviews` records are copied into renewal history without deleting the originals. Workflow approval records retain the supplied approver ID; authenticated integrations can also supply `reviewer-id` through request context for tool approvals. The save tool uses the stored workflow review rather than model-supplied review content.
-
-When upgrading, stop old writers before starting this version. The renamed weekly workflow creates a new schedule: its old pause status is not carried over. A previously paused schedule must be paused again as `wf_weekly-renewal-review` in Studio; plan this as a maintenance change, not a drop-in rename.
-
-Run `npm run validate` for type checking, regression tests, fixture evaluations, and the production build; CI runs the same checks on Node 22.13. The bundled scorers are structural checks; they do not establish factual accuracy of model-generated outreach.
+Run `npm run validate` before contributing; CI runs the same checks. Model-output accuracy still needs human review.
 
 ## About Mastra templates
 
