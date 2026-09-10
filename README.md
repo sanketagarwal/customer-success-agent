@@ -61,8 +61,6 @@ Implement [CustomerDataSource](src/mastra/data.ts) for other systems, adjust [ri
 
 Keep `MASTRA_DB_URL` persistent and reconcile uncertain CRM writes before retrying. On upgrades, stop old writers and reapply any schedule pause to `wf_weekly-renewal-review`. Fixtures are not bundled for deployment.
 
-Run `npm run validate` before contributing; CI runs the same checks. Model-output accuracy still needs human review.
-
 ## About Mastra templates
 
 Mastra templates are ready-to-use projects that show what you can build with Mastra. Clone one, try it in Studio, and adapt it to your use case.
