@@ -63,6 +63,6 @@ Keep `MASTRA_DB_URL` persistent and reconcile uncertain CRM writes before retryi
 
 ## About Mastra templates
 
-Mastra templates are ready-to-use projects that show what you can build with Mastra. Clone one, try it in Studio, and adapt it to your use case.
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
 
-Want to contribute? Open an issue or pull request in the [canonical repository](https://github.com/sanketagarwal/customer-success-agent).
+Want to contribute? See [CONTRIBUTING.md](https://github.com/mastra-ai/mastra/blob/main/templates/template-chat-with-youtube/CONTRIBUTING.md).
