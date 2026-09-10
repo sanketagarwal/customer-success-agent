@@ -1,6 +1,6 @@
-# Customer Success Renewal Agent
+# Customer Renewal Risk and Recovery
 
-Give the workflow a customer account ID and it combines product usage, support, billing, and CRM signals into an evidence-backed health assessment, owned recovery plan, and outreach draft. At-risk plans wait for CSM approval before the agent records an internal CRM note and follow-up tasks.
+Give the workflow a customer account ID and it combines product usage, support, billing, and CRM signals into an evidence-backed health assessment, owned recovery plan, and outreach draft. At-risk plans wait for CSM approval before the workflow records an internal CRM note and follow-up tasks.
 
 ## Why we built this
 
@@ -16,38 +16,21 @@ This template brings those signals together early enough for a customer success 
 - Handles healthy accounts and missing data without inventing risk
 - Pauses at-risk reviews for CSM approval before creating CRM records
 
-## Quick start
+## Prerequisites
 
-Requires Node.js 22.13 or newer.
+- [Node.js 22.13 or newer](https://nodejs.org/en/download)
+- No API key is required for the included fixture demo
 
-### 1. Clone the template
+## Quickstart
 
-Run:
+1. **Clone the template**
+   - Run `npx create-mastra@latest --template customer-renewal-risk-and-recovery` to scaffold the project locally.
+2. **Set up the environment**
+   - Copy `.env.example` to `.env`. The defaults use fixture data and deterministic generation, so the demo runs without credentials.
+3. **Start the dev server**
+   - Run `npm run dev` and open [localhost:4111](http://localhost:4111). Select **Workflows → renewal-risk-review** and run the default Redwood Retail account; the account ID and data provider can be updated.
 
-```bash
-npx create-mastra@latest --template customer-success-agent
-cd customer-success-agent
-```
-
-### 2. Add your API keys
-
-Copy the example environment file:
-
-```bash
-cp .env.example .env
-```
-
-The included fixture demo runs without API keys. Leave `DATA_SOURCE=fixture` and `GENERATION_MODE=deterministic` for the first run.
-
-### 3. Start the dev server
-
-```bash
-npm run dev
-```
-
-Open [Mastra Studio](http://localhost:4111), select **Workflows → customer-success-account**, and click **Run**. The workflow defaults to the credential-free Redwood Retail fixture (`340734348989`); update the account ID or `.env` settings to use another account or data provider. At-risk reviews pause for CSM approval before any CRM write.
-
-## Try the other outcomes
+## Run the demo
 
 The bundled accounts cover the workflow's main decisions:
 
@@ -57,7 +40,7 @@ The bundled accounts cover the workflow's main decisions:
 | `340739743463` | Healthy adoption and positive account signals | Completes with `no_action` |
 | `340737895140` | Too few reliable signals | Completes with `insufficient_data` |
 
-Run **Workflows → weekly-customer-success** with `{}` to review the complete fixture portfolio. Healthy and insufficient-data accounts complete automatically; at-risk accounts are returned as `awaiting_approval` for individual review.
+Run **Workflows → weekly-renewal-review** with `{}` to review the complete fixture portfolio. Healthy and insufficient-data accounts complete automatically; at-risk accounts return `awaiting_approval` and their individual `runId` for review and resumption at `request-csm-approval`.
 
 ## Connect HubSpot
 
@@ -67,11 +50,21 @@ The private app needs read access to the relevant CRM objects plus permission to
 
 ## Making it yours
 
+Fixtures are for the local demo. Deployments should connect HubSpot or implement `CustomerDataSource` for their own systems; demo fixtures are not copied into the deployment bundle.
+
 - Connect your product analytics and CRM systems through the existing customer data source boundary.
 - Adjust the risk thresholds, action ownership, approval policy, or portfolio schedule to match your customer success process.
+
+Keep `MASTRA_DB_URL` on persistent storage. Each successful CRM task/note is checkpointed, so a confirmed rejected request can be retried without repeating completed writes. A timeout or other uncertain outcome stays pending until the remote records are reconciled; do not clear that claim blindly. Custom adapters should use the optional `checkpoint` callback for each write and throw `WriteNotAppliedError` only when the provider confirms the operation was not applied.
+
+Legacy customer-success workflow IDs remain available for saved runs, without adding a second schedule. The `customerSuccessAgent` API key aliases `renewalRiskAgent`; both use the same agent. Existing `cs_reviews` records are copied into renewal history without deleting the originals. Workflow approval records retain the supplied approver ID; authenticated integrations can also supply `reviewer-id` through request context for tool approvals. The save tool uses the stored workflow review rather than model-supplied review content.
+
+When upgrading, stop old writers before starting this version. The renamed weekly workflow creates a new schedule: its old pause status is not carried over. A previously paused schedule must be paused again as `wf_weekly-renewal-review` in Studio; plan this as a maintenance change, not a drop-in rename.
+
+Run `npm run validate` for type checking, regression tests, fixture evaluations, and the production build; CI runs the same checks on Node 22.13. The bundled scorers are structural checks; they do not establish factual accuracy of model-generated outreach.
 
 ## About Mastra templates
 
 Mastra templates are ready-to-use projects that show what you can build with Mastra. Clone one, try it in Studio, and adapt it to your use case.
 
-Want to contribute? See the [customer success template contributing guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-customer-success-agent/CONTRIBUTING.md).
+Want to contribute? Open an issue or pull request in the [canonical repository](https://github.com/sanketagarwal/customer-success-agent).

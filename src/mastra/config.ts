@@ -1,9 +1,6 @@
 import { resolve } from 'node:path';
 import { z } from 'zod';
-const booleanString = z
-  .enum(['true', 'false'])
-  .default('false')
-  .transform((value) => value === 'true');
+
 const environmentSchema = z.object({
   DATA_SOURCE: z.enum(['fixture', 'hubspot']).default('fixture'),
   TENANT_ID: z.string().default('demo-tenant'),
@@ -14,9 +11,6 @@ const environmentSchema = z.object({
   GENERATION_MODE: z.enum(['deterministic', 'model']).default('deterministic'),
   MODEL_INPUT_COST_PER_MILLION: z.coerce.number().nonnegative().default(0),
   MODEL_OUTPUT_COST_PER_MILLION: z.coerce.number().nonnegative().default(0),
-  ENABLE_OBSERVATIONAL_MEMORY: booleanString,
-  ENABLE_SEMANTIC_RECALL: booleanString,
-  EMBEDDING_MODEL: z.string().default('openai/text-embedding-3-small'),
   CUSTOMER_SUCCESS_CRON: z.string().default('0 9 * * 1'),
   CUSTOMER_SUCCESS_TIMEZONE: z.string().default('UTC'),
   MAX_ACCOUNT_CONCURRENCY: z.coerce.number().int().min(1).max(25).default(4),
@@ -26,11 +20,14 @@ const environmentSchema = z.object({
   HUBSPOT_BASE_URL: z.url().default('https://api.hubapi.com'),
   HUBSPOT_RENEWAL_PROPERTY: z.string().default('renewal_date'),
 });
+
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
   const values = environmentSchema.parse(environment);
+
   if (values.DATA_SOURCE === 'hubspot' && !values.HUBSPOT_PRIVATE_APP_TOKEN) {
     throw new Error('HUBSPOT_PRIVATE_APP_TOKEN is required when DATA_SOURCE=hubspot');
   }
+
   return {
     dataSource: values.DATA_SOURCE,
     tenantId: values.TENANT_ID,
@@ -41,9 +38,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     generationMode: values.GENERATION_MODE,
     inputCost: values.MODEL_INPUT_COST_PER_MILLION,
     outputCost: values.MODEL_OUTPUT_COST_PER_MILLION,
-    observationalMemory: values.ENABLE_OBSERVATIONAL_MEMORY,
-    semanticRecall: values.ENABLE_SEMANTIC_RECALL,
-    embeddingModel: values.EMBEDDING_MODEL,
     cron: values.CUSTOMER_SUCCESS_CRON,
     timezone: values.CUSTOMER_SUCCESS_TIMEZONE,
     maxConcurrency: values.MAX_ACCOUNT_CONCURRENCY,
@@ -54,4 +48,5 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     hubspotRenewalProperty: values.HUBSPOT_RENEWAL_PROPERTY,
   };
 }
+
 export type Config = ReturnType<typeof loadConfig>;

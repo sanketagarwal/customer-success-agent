@@ -1,8 +1,10 @@
+import { persistApprovedReview } from './approval.js';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import type { CustomerDataSource } from './data.js';
 import type { ReviewHistory } from './history.js';
 import { accountSignalsSchema, reviewSchema } from './schemas.js';
+
 export function createCustomerTools(data: CustomerDataSource, history: ReviewHistory) {
   const listAccounts = createTool({
     id: 'list-customer-accounts',
@@ -11,6 +13,7 @@ export function createCustomerTools(data: CustomerDataSource, history: ReviewHis
     outputSchema: z.array(accountSignalsSchema),
     execute: () => data.listAccounts(),
   });
+
   const getCustomerSignals = createTool({
     id: 'get-customer-signals',
     description: 'Get normalized usage, support, billing, and CRM signals for one account.',
@@ -18,20 +21,24 @@ export function createCustomerTools(data: CustomerDataSource, history: ReviewHis
     outputSchema: accountSignalsSchema.nullable(),
     execute: ({ accountId }) => data.getAccount(accountId),
   });
+
   const saveApprovedReview = createTool({
     id: 'save-approved-review',
-    description: 'Save a human-approved review as an internal CRM note. Never sends outreach.',
+    description: 'Save a persisted workflow review after human approval. Never sends outreach.',
     inputSchema: reviewSchema,
     outputSchema: z.object({ writeId: z.string(), taskIds: z.array(z.string()) }),
     requireApproval: true,
-    execute: async (review) => {
-      await history.record(review);
-      return history.writeOnce(review.runId, () => data.saveReview(review));
+    execute: async (review, context) => {
+      const reviewerId = context?.requestContext?.get('reviewer-id');
+      return persistApprovedReview(data, history, review,
+        typeof reviewerId === 'string' && reviewerId.trim() ? reviewerId : undefined);
     },
   });
+
   const getMonitoring = createTool({
     id: 'get-customer-success-monitoring',
-    description: 'Summarize persisted account reviews, approvals, costs, latency, feedback, and alerts.',
+    description:
+      'Summarize persisted account reviews, approvals, costs, latency, feedback, and alerts.',
     inputSchema: z.object({ accountId: z.string().optional() }),
     outputSchema: z.object({
       reviews: z.number(),
@@ -44,5 +51,6 @@ export function createCustomerTools(data: CustomerDataSource, history: ReviewHis
     }),
     execute: ({ accountId }) => history.dashboard(accountId),
   });
+
   return { listAccounts, getCustomerSignals, saveApprovedReview, getMonitoring };
 }

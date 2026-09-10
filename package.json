@@ -1,7 +1,7 @@
 {
-  "name": "template-customer-success-agent",
+  "name": "template-customer-renewal-risk-and-recovery",
   "version": "1.0.0",
-  "description": "A scheduled customer-success agent that finds renewal risk, prepares follow-up, waits for CSM approval, and updates CRM.",
+  "description": "A customer renewal workflow that finds risk, prepares recovery actions, waits for CSM approval, and updates the CRM.",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -14,7 +14,8 @@
     "start": "mastra start",
     "typecheck": "tsc --noEmit",
     "evals": "tsx scripts/evals.ts",
-    "validate": "npm run typecheck && npm run evals && npm run build"
+    "test": "tsx --test scripts/*.test.ts",
+    "validate": "npm run typecheck && npm test && npm run evals && npm run build"
   },
   "dependencies": {
     "@libsql/client": "0.17.4",

@@ -1,6 +1,8 @@
 import { z } from 'zod';
+
 export const isoDate = z.iso.datetime({ offset: true });
 const signalName = z.enum(['usage', 'support', 'billing', 'crm']);
+
 export const accountSignalsSchema = z.object({
   tenantId: z.string(),
   accountId: z.string(),
@@ -19,17 +21,26 @@ export const accountSignalsSchema = z.object({
   crm: z.object({ sentiment: z.enum(['positive', 'neutral', 'negative', 'unknown']).nullable() }),
   unavailable: z.array(signalName).default([]),
 });
+
 export const riskSchema = z.object({
   category: signalName,
   severity: z.enum(['medium', 'high', 'critical']),
   title: z.string(),
   evidence: z.string(),
 });
+
 export const actionSchema = z.object({
   title: z.string(),
   owner: z.enum(['csm', 'support', 'billing', 'product']),
   dueAt: isoDate,
 });
+
+export const approvalSchema = z.object({
+  decision: z.enum(['approved', 'rejected']),
+  approverId: z.string().min(1),
+  feedback: z.string().max(2000).optional(),
+});
+
 export const reviewSchema = z.object({
   runId: z.string(),
   accountId: z.string(),
@@ -38,8 +49,15 @@ export const reviewSchema = z.object({
   expiresAt: isoDate,
   sourceHash: z.string(),
   artifactHash: z.string(),
-  outcome: z.enum(['no_action', 'awaiting_approval', 'rejected', 'written',
-    'insufficient_data', 'stale_approval']),
+  approval: approvalSchema.extend({ decidedAt: isoDate }).optional(),
+  outcome: z.enum([
+    'no_action',
+    'awaiting_approval',
+    'rejected',
+    'written',
+    'insufficient_data',
+    'stale_approval',
+  ]),
   score: z.number().int().min(0).max(100).nullable(),
   summary: z.string(),
   risks: z.array(riskSchema),
@@ -59,12 +77,9 @@ export const reviewSchema = z.object({
     costUsd: z.number().nonnegative(),
   }),
 });
-export const approvalSchema = z.object({
-  decision: z.enum(['approved', 'rejected']),
-  approverId: z.string().min(1),
-  feedback: z.string().max(2000).optional(),
-});
+
 export type AccountSignals = z.infer<typeof accountSignalsSchema>;
 export type Review = z.infer<typeof reviewSchema>;
 export type Risk = z.infer<typeof riskSchema>;
+
 export const outreachSchema = reviewSchema.shape.outreach.unwrap();
